@@ -26,3 +26,4 @@
 2026-11-18T20:48:48Z	1a0d055cc5831d95536f58a8dbed5d68-67-6	fixverify2	400	standard	high_availability	fixverify-4: v1.4.5 + all 3 fixes (reset dedup, reset lost-signal, stop-during-start), hunt driver
 2026-11-19T15:56:23Z	fc87ca1b65b52553e7c27afe9f6897ef-67-6	fixverify3	400	fast	high_availability	fixverify-5: v1.4.5 + complete patch set (v2 dedup, base dedup copy, reset dedup across CAN, acked-lost, stop-during-start, sql close)
 2026-11-19T16:01:55Z	37b22144050fa198dba4d8a45fe63b29-67-6	v1.4.5-hb	300	fast	high_availability	hb-1: v1.4.5 with default decisionHeartbeatTimeout (30m) to seek a second Go-client heartbeat stall
+2026-11-19T20:57:01Z	68cc2e9daf03e54787bfa9e0b8cf7e50-67-6	fixverify4	400	fast	high_availability	fixverify-6: corrected complete patch set (shard-scoped base read, 3 more Stop guards, signal dedup across continue-as-new)

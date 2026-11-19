@@ -32,3 +32,6 @@
 2026-11-18T21:40Z XDC harness ready (antithesis-xdc/README.md); validated locally on both versions.
 2026-11-19T15:56Z fixverify residuals (rca/fixverify-residuals.md): sigterm fix verified (0 nil panics); acked-lost fix verified for own mechanism; dedup v1 partial (needs v2 + base-dedup copy + reset dedup across CAN). New finding sql-admin-conn-close-panic. fixverify-5 fc87ca1b launched (fast, 400 CH) with complete patch set fixes/combined-fixverify3.patch.
 2026-11-19T16:01Z confirmations: acked-lost confirmed on v1.4.5 (rca/acked-signal-lost-on-reset-v145.md; property mixes with retried-reset); retried-reset 2nd occurrence on unpatched v1.4.5 (rca/retried-reset-applied-twice-2nd.md); heartbeat stall not found (1m cap hides it) -> hb-1 run launched with default timeout.
+2026-11-19T20:25Z hb-1: heartbeat stall confirmed x4 (rca/heartbeat-stall-hb1.md). fixverify-5 done: acked-survives-reset passes (0).
+2026-11-19T20:51Z CORRECTION: fixverify-5 invalid — our reset-copies-base-dedup-set patch broke every reset (missing ShardID). Fixing patch + 3 more Stop guards + signal-dedup-across-can; fixverify-6 next.
+2026-11-19T20:57Z fixverify-6 launched with fixes/combined-fixverify4.patch (corrected).

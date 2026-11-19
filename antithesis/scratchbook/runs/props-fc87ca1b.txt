@@ -1,0 +1,93 @@
+Always assertions
+STATUS     ✓    ✗  ID                                NAME
+fail    4.9k   94  9ed5074db5f699942fb1a8c295ee1848  a closed workflow keeps its outcome
+fail    5.1k  296  ececa401805c913787901f4f7b308737  a completed workflow returns the result its inputs determine
+fail    5.5k   35  bd9bb8e77070258ae4f622fc68db8aa9  a history read after a workflow closed includes its close event
+fail    5.3k   94  d1060d12bffe3122298199bed1035abb  a query shows each delivered signal once
+fail    5.1k   32  89fc3175ddfcd6813d2fc2c81c30d4e2  a second start of an open workflow ID is rejected
+fail    3.6k  114  0047ac34d8a73c9f6e4bcc73fda7d8d5  a signal is applied at most once in a workflow that was reset
+fail    3.4k   59  d957577978730cb93c0fd784659a0620  a start on a closed workflow ID follows its reuse policy
+fail    3.8k   93  23a564fc69205b8bce382edfb09e96c7  a timer never fires before its duration
+fail    4.2k  296  b1ba5baa3d084b86827572e4ca4d9119  a workflow only applies signals that clients sent
+fail    3.9k  100  7baf4e08f93681ade7a9f3111e785608  an acknowledged signal is applied exactly once
+fail    5.7k  107  1507d8c710fcdb8829081fadac6948cd  every client is served again once faults stop
+fail    4.6k  410  5500cab2e68ea4563ecc51016118476a  every started workflow closes once faults stop
+fail    4.2k   80  474a9291cd0a85f3852c2be404e31544  signals are applied in the order they were acknowledged
+pass    5.1k    0  4fd0684eb9689acd825b1031a482f08a  a closed workflow appears in visibility once faults stop
+pass    5.9k    0  2c1100994b4518137e79c47e9fe04399  a new workflow completes within 2 minutes once faults stop
+pass    5.5k    0  5086eb8a4f49b0d009824240a37ea7d7  a workflow does not heartbeat decisions without progress
+pass    5.5k    0  6d302bb1000e61d3a6c725151417af5d  a workflow ends only as completed, or as canceled or terminated on request
+pass    5.5k    0  8867383a8b14a68fb9aacb97ef824d2f  a workflow history is well formed
+pass    3.3k    0  35aaba6a1d761df68e38f7781c388456  an acknowledged signal survives a reset of its workflow
+
+No unexpected container exits
+STATUS  ✓   ✗  ID                                NAME
+fail    0   9  c39f1a41de0c9a112906071282910115  container: client1, exit code: 2
+fail    0   6  1a1f8ad45ba1c6ca77a069c7a527e63f  container: client2, exit code: 2
+fail    0  12  10cc5423cafe5ad39f6066f5ac1b16c0  container: client3, exit code: 2
+
+Sometimes assertions
+STATUS     ✓     ✗  ID                                NAME
+fail       0     0  edc0d792f3539d4c4040fe822c511051  a workflow reset succeeds
+pass    3.9k     0  ea5fbb04fa272ad565cafcf627029c85  a cancel request closes a workflow as canceled
+pass    2.6k     0  bab796abd5b6d9cb1f22f2abfeb3bb43  a closed workflow ID is reused
+pass    5.2k  1.9k  558edf74a5183d8381d2b7847ed61d55  a duplicate start is rejected as already started
+pass    4.0k     0  62c8a54bd8cd66c46be1fce490bfdcac  a history contains a canceled timer
+pass    4.8k     0  8e4eb552173c2b4f83b932127cc7bca4  a parent workflow completes with all its children
+pass    4.8k  4.3k  c6f765f827f8b5293922d2e160f705fc  a query sees applied signals
+pass    3.2k  1.3k  54377dada9ac283a572014c10f3a10cf  a race workflow cancels a timer
+pass    3.3k  2.7k  d32e0c548125641756af94f7ab90c353  a race workflow cancels timers in consecutive rounds
+pass    3.3k  3.9k  38e0521cb1a49afec51b317351f19d93  a reset workflow completes
+pass    2.9k     0  daa00d110043ebc54e50bdf0b23ff2a6  a reuse policy rejects a start on a closed workflow ID
+pass    6.4k     0  1534702687308bf1caf0593229aa0a13  a signal is acknowledged
+pass    1.5k  4.2k  5c54ad4836c940ac98b527eda05d54e8  a signal with an unknown outcome is applied
+pass    2.4k  4.0k  3cfa7050859aa605ac437e1e4742d9e8  a signal workflow continues as new and completes
+pass    2.9k     0  d6e58c583257faa4af4783c8ffb19ade  a start returns an unknown outcome
+pass    4.5k     0  c1f8b69275c6c1ac3f186a49db39f498  a terminate request closes a workflow
+pass    4.4k     0  79351581b6ca5c89048a6f2dcb96c7fe  an activity workflow completes
+
+Unreachability assertions
+STATUS  ✓   ✗  ID                                NAME
+fail    0  27  34f415ae534e64faa7dbf64fddb21ed9  a cadence server process crashes
+pass    0   0  54fe43f5c4eed655e11b8b53708086c5  a client can't run a request
+pass    0   0  18ff46135e31cf207de00ff49d9b34b6  a workflow result can't be decoded
+
+Always: Commands finish with zero exit code
+STATUS    ✓  ✗  ID                                NAME
+pass    16k  0  56b0358d3246d2df435d0840cce295db  main/first_start_workload
+
+Antithesis SDK version is supported
+STATUS     ✓  ✗  ID                                NAME
+pass    115k  0  f97736702cf9edf747b7eb46feb80ae8  Language name: Go, sdk version: 0.9.0
+
+Reachability assertions
+STATUS     ✓  ✗  ID                                NAME
+pass    3.4k  0  dd234ba7f6440fde7b5bda0012d26470  a client restarts
+pass     16k  0  b9670c04ff0b861398a3ff872c32cd99  the workload starts
+
+(ungrouped)
+STATUS     ✓  ✗  ID                                NAME
+fail       0  1  4a1d9c2abd2d220454711f2a31559b9b  Customer output volume
+pass       1  0  ff0bd9d8c4dfb26b0098dd727dda20da  All commands were run to completion at least once
+pass       1  0  5912690369f1a87d5d98715ebfd35b82  All commands were started at least once
+pass       0  0  e53149ec615815960c9792a18191c9e1  AlwaysOrUnreachable assertions
+pass       9  0  2c9044cb39a45e6b53f14c8430e114ff  Containers joined the Antithesis network
+pass       1  0  8c2e02f59afe8e14a1f3813df3a2fdb1  Every instrumented module has symbols
+pass       1  0  c1892c3ec6df9c69ec5ff7e52e4ae97d  Invalid paths found during Antithesis instrumention
+pass       0  0  7b0742317b22d173e73633cf341e645a  Never: Invalid commands found
+pass       1  0  e1fb32a9983ea150a19565d2e361f9eb  No Antithesis build errors
+pass       1  0  9937dabdf298c0d140e1001d83a95bd2  No Antithesis build warnings
+pass       0  0  1ea488bbfbf3331fc8687430e90262fb  No Antithesis errors
+pass       0  0  3e8a079a9d3ef900149c4f004868e9ac  No Antithesis session errors
+pass       0  0  0eccc338a31d4eac4f12938fa053ea2b  No unexpected crashes
+pass       1  0  1a6f52995ca1179f6864f8d35f2ed895  Paths found for Antithesis instrumentation
+pass    786k  0  c4386cb75c3a5407227cac7868a1249d  Peak memory usage
+pass       4  1  91a5a2c13baf1a0247b2a256c24090c2  Recent software version provided
+pass       1  0  3cbb7c055b34f9c64254b36aea4c73c9  Setup finished within 10 minutes
+pass       5  0  4c9aaffcf8fb719faa38c184f68d6b03  Software images match expected platform
+pass     272  0  d315543d7c2bf749225f148b1a4af3f2  Software was instrumented
+pass       1  0  81269b2cac0314b8bdb15ab87070b525  Test ran with full parallelism
+pass       1  0  3a9598c22ec346435a7f35bbd569aeec  The Antithesis Fault Injector was started
+pass       7  0  3d0eb23834f0c3276561ea5763a0e033  Thread pausing was enabled
+pass       1  0  86f873d5b9d2327f6acff660eca52133  Unique commands found
+pass       1  0  3e7ce211fb0cd5a4ce5df908f47245f8  Virtual time per wall time

@@ -1,5 +1,7 @@
 # How the tests work: Cadence under Antithesis
 
+**Document version:** third edition, 2026-11-19, to match the third edition of the [report](speedrun-report.md). The tests are unchanged; the check "a workflow does not heartbeat decisions without progress" ([below](#checks-that-must-hold-every-time)) is the one that flagged the [Go-client stall](speedrun-report.md#retried-decision-heartbeat-stalls-workflow) again in run `37b22144`, which used the default 30-minute decision heartbeat timeout.
+
 The workload behind the [Cadence master report](speedrun-report.md). It is one Go program, the driver ([driver/](../antithesis/driver/)), which uses the hegel property-based testing library to run randomized operations (rules) against Cadence through three client containers ([client/](../antithesis/client/)). Every outcome is checked against a model of what the driver sent and what Cadence acknowledged. The checks are Antithesis SDK assertions: `Always` (must hold every time), `Unreachable` (must never happen), and `Sometimes` / `Reachable` (an interesting case must happen at least once, which shows the test reached it).
 
 ## How a test run goes

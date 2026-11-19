@@ -3,6 +3,9 @@
 This document explains the test code (workload) used against Cadence v1.4.5, so its checks can be
 judged without reading all of the code. It goes with the [test report](speedrun-report.md).
 
+**Document version:** third edition, 2026-11-19, matching the third edition of the
+[test report](speedrun-report.md). Its content is unchanged from the second edition.
+
 The workload is a single long-running driver program written in Go with
 [hegel](https://hegel.dev) (a property-based, stateful test library), not a set of separate test
 commands. The driver holds a model of everything it asked Cadence to do, picks its next action at
