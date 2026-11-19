@@ -1,0 +1,5 @@
+services:
+  driver:
+    environment:
+      ANTITHESIS_SDK_LOCAL_OUTPUT: /tmp/sdk.jsonl
+      EVENTUALLY_OFF: "1"

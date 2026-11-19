@@ -1,0 +1,153 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.29kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian:trixie-slim
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/golang:1.26-trixie
+#3 DONE 0.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [stage-1 1/5] FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+#5 resolve docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 0.0s done
+#5 DONE 0.0s
+
+#6 [build 1/8] FROM docker.io/library/golang:1.26-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d
+#6 resolve docker.io/library/golang:1.26-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d 0.0s done
+#6 DONE 0.1s
+
+#7 [internal] load build context
+#7 transferring context: 71.31kB done
+#7 DONE 0.0s
+
+#8 [build 2/8] RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-toolexec@v0.9.0
+#8 CACHED
+
+#9 [build 3/8] RUN cd /tmp && GOFLAGS=-mod=mod go mod download -json github.com/antithesishq/antithesis-sdk-go@v0.9.0 > sdk.json &&     cp -r "$(sed -n 's/.*"Dir": "(.*)".*/\1/p' sdk.json)" /antithesis-sdk-go && chmod -R u+w /antithesis-sdk-go
+#9 CACHED
+
+#10 [build 4/8] WORKDIR /src
+#10 CACHED
+
+#11 [build 5/8] COPY go.mod go.sum ./
+#11 DONE 0.1s
+
+#12 [build 6/8] RUN go mod download
+#12 DONE 2.4s
+
+#13 [build 7/8] COPY *.go ./
+#13 DONE 0.2s
+
+#14 [build 8/8] RUN ANTITHESIS_INSTRUMENT=cadence-antithesis/client,go.uber.org/cadence ANTITHESIS_DISPLAY_NAME=cadence-client     go build -toolexec=antithesis-go-toolexec -o /out/client . &&     echo "init_coverage: $(go tool nm /out/client | grep -c 'voidstarHandler).init_coverage')"
+#14 42.20 # cadence-antithesis/client
+#14 42.20 antithesis-go-toolexec: collected 28 symbol tables into /symbols
+#14 43.24 init_coverage: 2
+#14 DONE 43.8s
+
+#15 [stage-1 2/5] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates socat jq procps && rm -rf /var/lib/apt/lists/*
+#15 CACHED
+
+#16 [stage-1 3/5] COPY --from=build /out/client /usr/local/bin/client
+#16 DONE 0.2s
+
+#17 [stage-1 4/5] COPY --from=build /symbols /symbols
+#17 DONE 0.1s
+
+#18 [stage-1 5/5] RUN mkdir -p /clients
+#18 DONE 0.3s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 2.6s done
+#19 exporting manifest sha256:9bd9b53455200f9a73556bd1ca21bde0234a8a6b67850857720cc53dbaa13b77
+#19 exporting manifest sha256:9bd9b53455200f9a73556bd1ca21bde0234a8a6b67850857720cc53dbaa13b77 0.0s done
+#19 exporting config sha256:9b0c8b955b16bbcf56056ce7b2280a0b81046551ab7d4fd61e131916d4c7ed88 0.0s done
+#19 exporting attestation manifest sha256:612b54a884fa81d3143fdea20eade86ceaa00252918fa28fc8eeb9f3d0142019 0.0s done
+#19 exporting manifest list sha256:0b049766160814260c10fd5fd7e8740d1a1776e79f4084a3e67bcf9f3166c95b
+#19 exporting manifest list sha256:0b049766160814260c10fd5fd7e8740d1a1776e79f4084a3e67bcf9f3166c95b 0.0s done
+#19 naming to docker.io/library/cadence-client-xdc:latest done
+#19 unpacking to docker.io/library/cadence-client-xdc:latest
+#19 unpacking to docker.io/library/cadence-client-xdc:latest 0.5s done
+#19 DONE 3.4s
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 885B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/golang:1.26-trixie
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/debian:trixie-slim
+#3 DONE 0.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [build 1/7] FROM docker.io/library/golang:1.26-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d
+#5 resolve docker.io/library/golang:1.26-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d 0.0s done
+#5 DONE 0.0s
+
+#6 [stage-1 1/6] FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+#6 resolve docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 0.0s done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 58.80kB done
+#7 DONE 0.0s
+
+#8 [build 2/7] RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-toolexec@v0.9.0
+#8 CACHED
+
+#9 [build 3/7] WORKDIR /src
+#9 CACHED
+
+#10 [build 4/7] COPY go.mod go.sum ./
+#10 CACHED
+
+#11 [build 5/7] RUN go mod download
+#11 CACHED
+
+#12 [build 6/7] COPY *.go ./
+#12 DONE 0.1s
+
+#13 [build 7/7] RUN ANTITHESIS_DISPLAY_NAME=cadence-driver go build -toolexec=antithesis-go-toolexec -o /out/driver . &&     echo "init_coverage: $(go tool nm /out/driver | grep -c 'voidstarHandler).init_coverage')"
+#13 10.71 # cadence-antithesis/driver
+#13 10.71 antithesis-go-toolexec: collected 1 symbol table into /symbols
+#13 11.49 init_coverage: 2
+#13 DONE 11.7s
+
+#14 [stage-1 2/6] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates socat jq procps && rm -rf /var/lib/apt/lists/*
+#14 CACHED
+
+#15 [stage-1 3/6] COPY --from=build /out/driver /usr/local/bin/driver
+#15 DONE 0.1s
+
+#16 [stage-1 4/6] COPY --from=build /symbols /symbols
+#16 DONE 0.1s
+
+#17 [stage-1 5/6] COPY first_start_workload /opt/antithesis/test/v1/main/first_start_workload
+#17 DONE 0.1s
+
+#18 [stage-1 6/6] RUN chmod 755 /opt/antithesis/test/v1/main/first_start_workload && mkdir -p /clients
+#18 DONE 0.3s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 1.0s done
+#19 exporting manifest sha256:027fe64493fa89ab57a1ccade0887cccd58bfcaefbe85ecf13c2acccea0f4750 0.0s done
+#19 exporting config sha256:750819dbf7a799054d390cef496d34b430e7ad93140e0476bae74261d61d9f2a 0.0s done
+#19 exporting attestation manifest sha256:10a38fde633c17fa6d517fc0d1641fd0b35b9dad47df49dac3d5d0318efc5c9f 0.0s done
+#19 exporting manifest list sha256:23d8077e4fdb9b9e618fbbc96b047c40c3150d91cb5614dcfdee685c393f4e90
+#19 exporting manifest list sha256:23d8077e4fdb9b9e618fbbc96b047c40c3150d91cb5614dcfdee685c393f4e90 0.0s done
+#19 naming to docker.io/library/cadence-driver-xdc:latest done
+#19 unpacking to docker.io/library/cadence-driver-xdc:latest
+#19 unpacking to docker.io/library/cadence-driver-xdc:latest 0.2s done
+#19 DONE 1.3s

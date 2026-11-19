@@ -1,0 +1,15 @@
+--- a/tools/sql/conn.go
++++ b/tools/sql/conn.go
+@@ -116,9 +116,8 @@
+ // Close closes the sql client
+ func (c *Connection) Close() {
+ 	if c.adminDb != nil {
+-		err := c.adminDb.Close()
+-		if err != nil {
+-			panic("cannot close connection")
+-		}
++		// A failed close (e.g. the server already dropped the connection) leaves nothing to
++		// clean up; crashing the server during startup over it is worse than ignoring it.
++		_ = c.adminDb.Close()
+ 	}
+ }

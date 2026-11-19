@@ -1,0 +1,54 @@
+diff --git a/service/frontend/service.go b/service/frontend/service.go
+index 62af03215..745dc77c8 100644
+--- a/service/frontend/service.go
++++ b/service/frontend/service.go
+@@ -353,6 +353,9 @@ func (s *Service) Stop() {
+ func (s *Service) stopRatelimiters() {
+ 	ctx, cancel := context.WithTimeout(context.Background(), time.Second) // should take nearly no time at all
+ 	defer cancel()
++	if s.ratelimiterCollections.user == nil || s.ratelimiterCollections.worker == nil {
++		return // Stop arrived before Start created the collections
++	}
+ 	if err := s.ratelimiterCollections.user.OnStop(ctx); err != nil {
+ 		s.GetLogger().Error("failed to stop user global ratelimiter collection", tag.Error(err))
+ 	}
+diff --git a/service/history/handler/handler.go b/service/history/handler/handler.go
+index 3a675a095..2873e0f84 100644
+--- a/service/history/handler/handler.go
++++ b/service/history/handler/handler.go
+@@ -221,17 +221,29 @@ func (h *handlerImpl) Stop() {
+ 	if h.replicationBudgetManager != nil {
+ 		h.replicationBudgetManager.Stop()
+ 	}
+-	h.replicationTaskFetchers.Stop()
+-	h.controller.Stop()
+-	h.queueTaskProcessor.Stop()
+-	h.historyEventNotifier.Stop()
+-	h.failoverCoordinator.Stop()
++	if h.replicationTaskFetchers != nil { // nil if Stop arrives before Start finished
++		h.replicationTaskFetchers.Stop()
++	}
++	if h.controller != nil {
++		h.controller.Stop()
++	}
++	if h.queueTaskProcessor != nil {
++		h.queueTaskProcessor.Stop()
++	}
++	if h.historyEventNotifier != nil {
++		h.historyEventNotifier.Stop()
++	}
++	if h.failoverCoordinator != nil {
++		h.failoverCoordinator.Stop()
++	}
+ }
+ 
+ // PrepareToStop starts graceful traffic drain in preparation for shutdown
+ func (h *handlerImpl) PrepareToStop(remainingTime time.Duration) time.Duration {
+ 	h.GetLogger().Info("ShutdownHandler: Initiating shardController shutdown")
+-	h.controller.PrepareToStop()
++	if h.controller != nil { // nil if Stop arrives before Start finished
++		h.controller.PrepareToStop()
++	}
+ 	h.GetLogger().Info("ShutdownHandler: Waiting for traffic to drain")
+ 	remainingTime = common.SleepWithMinDuration(shardOwnershipTransferDelay, remainingTime)
+ 	h.GetLogger().Info("ShutdownHandler: No longer taking rpc requests")

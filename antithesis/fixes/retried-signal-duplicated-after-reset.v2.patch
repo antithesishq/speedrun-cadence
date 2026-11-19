@@ -1,0 +1,76 @@
+diff -ruN a/service/history/execution/mutable_state_builder_methods_signal.go b/service/history/execution/mutable_state_builder_methods_signal.go
+--- a/service/history/execution/mutable_state_builder_methods_signal.go
++++ b/service/history/execution/mutable_state_builder_methods_signal.go
+@@ -79,6 +79,11 @@
+ 
+ 	// Increment signal count in mutable state for this workflow execution
+ 	e.executionInfo.SignalCount++
++	// Keep the dedup set derivable from history, so a run rebuilt from events (reset,
++	// rebuild) still deduplicates retries of signals it already contains.
++	if requestID := event.WorkflowExecutionSignaledEventAttributes.RequestID; requestID != "" {
++		e.AddSignalRequested(requestID)
++	}
+ 	e.insertWorkflowRequest(persistence.WorkflowRequest{
+ 		RequestID:   event.WorkflowExecutionSignaledEventAttributes.RequestID,
+ 		Version:     event.Version,
+diff -ruN a/service/history/reset/resetter.go b/service/history/reset/resetter.go
+--- a/service/history/reset/resetter.go
++++ b/service/history/reset/resetter.go
+@@ -390,6 +390,13 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// The rebuild copies the base run's WorkflowExecutionStarted event, and
++	// ReplicateWorkflowExecutionStartedEvent sets CreateRequestID from that event (the
++	// original start's request ID). ResetWorkflowExecution deduplicates a retried reset by
++	// comparing the current run's CreateRequestID with the reset request ID, so the reset
++	// run must carry the reset request ID, or a client retry of a reset that already
++	// committed resets the base again and discards the first reset run.
++	resetMutableState.GetExecutionInfo().CreateRequestID = resetRequestID
+ 
+ 	resetContext.SetHistorySize(resetHistorySize)
+ 	return execution.NewWorkflow(
+@@ -637,6 +644,11 @@
+ 			); err != nil {
+ 				return err
+ 			}
++			// The signal is carried into this run, so a client retry of the original
++			// SignalWorkflowExecution (same request ID) must be deduplicated here too.
++			if requestID := attr.GetRequestID(); requestID != "" {
++				mutableState.AddSignalRequested(requestID)
++			}
+ 		default:
+ 			// events other than signal will be ignored
+ 		}
+diff -ruN a/service/history/reset/resetter_test.go b/service/history/reset/resetter_test.go
+--- a/service/history/reset/resetter_test.go
++++ b/service/history/reset/resetter_test.go
+@@ -226,6 +226,9 @@
+ 	resetRequestID := uuid.New()
+ 	resetHistorySize := int64(4411)
+ 	resetMutableState := execution.NewMockMutableState(s.controller)
++	// The rebuilt run's CreateRequestID comes from the base run's start event.
++	resetExecutionInfo := &persistence.WorkflowExecutionInfo{CreateRequestID: "original-start-request-id"}
++	resetMutableState.EXPECT().GetExecutionInfo().Return(resetExecutionInfo).AnyTimes()
+ 	domainName := uuid.New()
+ 	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(domainName, nil).AnyTimes()
+ 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything, &persistence.ForkHistoryBranchRequest{
+@@ -276,6 +279,8 @@
+ 	s.NoError(err)
+ 	s.Equal(resetHistorySize, resetWorkflow.GetContext().GetHistorySize())
+ 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
++	// ResetWorkflowExecution dedups a retried reset on the current run's CreateRequestID.
++	s.Equal(resetRequestID, resetExecutionInfo.CreateRequestID)
+ }
+ 
+ func (s *workflowResetterSuite) TestFailInflightActivity() {
+@@ -792,6 +797,9 @@
+ 				attr.GetIdentity(),
+ 				"",
+ 			).Return(&types.HistoryEvent{}, nil).Times(1)
++			if attr.GetRequestID() != "" {
++				mutableState.EXPECT().AddSignalRequested(attr.GetRequestID()).Times(1)
++			}
+ 		}
+ 	}
+ 

@@ -1,0 +1,193 @@
+--- a/service/history/engine/engineimpl/reset_workflow_execution.go
++++ b/service/history/engine/engineimpl/reset_workflow_execution.go
+@@ -39,6 +39,10 @@
+ 
+ const (
+ 	DefaultPageSize = 100
++
++	// maxResetDedupLookback bounds how many continue-as-new predecessors of the current run
++	// are checked when deduplicating a retried reset request.
++	maxResetDedupLookback = 10
+ )
+ 
+ func (e *historyEngineImpl) ResetWorkflowExecution(
+@@ -122,7 +126,15 @@
+ 	}
+ 
+ 	// dedup by requestID
+-	if currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestID() {
++	duplicate := currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestID()
++	if !duplicate && currentRunID != baseRunID {
++		// the run this reset created may already have continued as new
++		duplicate, err = e.isResetRunPredecessor(ctx, domainID, workflowID, baseRunID, currentMutableState, request.GetRequestID())
++		if err != nil {
++			return nil, err
++		}
++	}
++	if duplicate {
+ 		e.logger.Info("Duplicated reset request",
+ 			tag.WorkflowID(workflowID),
+ 			tag.WorkflowRunID(currentRunID),
+@@ -294,3 +306,51 @@
+ 
+ 	return fmt.Errorf("reset event ID %v not found in the history events", resetEventID)
+ }
++
++// isResetRunPredecessor reports whether a continue-as-new predecessor of the current run was
++// created by the reset with this request ID (its CreateRequestID is the reset request ID), i.e.
++// whether the reset was already applied and the run it created has since continued as new.
++// The walk stops at the base run: a run created by this reset starts after the base run.
++func (e *historyEngineImpl) isResetRunPredecessor(
++	ctx context.Context,
++	domainID string,
++	workflowID string,
++	baseRunID string,
++	currentMutableState execution.MutableState,
++	requestID string,
++) (bool, error) {
++	if requestID == "" {
++		return false, nil
++	}
++	mutableState := currentMutableState
++	for i := 0; i < maxResetDedupLookback; i++ {
++		startEvent, err := mutableState.GetStartEvent(ctx)
++		if err != nil {
++			return false, err
++		}
++		previousRunID := startEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunID()
++		if previousRunID == "" || previousRunID == baseRunID {
++			return false, nil
++		}
++		// A continue-as-new predecessor is closed and no longer changes, so it is read from
++		// the database without taking its lock (the base and current runs are already locked).
++		previousContext := execution.NewContext(
++			domainID,
++			types.WorkflowExecution{WorkflowID: workflowID, RunID: previousRunID},
++			e.shard,
++			e.executionManager,
++			e.logger,
++		)
++		mutableState, err = previousContext.LoadWorkflowExecution(ctx)
++		if err != nil {
++			if _, ok := err.(*types.EntityNotExistsError); ok {
++				return false, nil
++			}
++			return false, err
++		}
++		if mutableState.GetExecutionInfo().CreateRequestID == requestID {
++			return true, nil
++		}
++	}
++	return false, nil
++}
+--- a/service/history/engine/engineimpl/reset_workflow_execution_test.go
++++ b/service/history/engine/engineimpl/reset_workflow_execution_test.go
+@@ -51,6 +51,8 @@
+ 	latestExecution              = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: latestRunID}
+ 	previousRunID                = "bbbbbeef-0123-4567-890a-bcdef0123456"
+ 	previousExecution            = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: previousRunID}
++	resetRunID                   = "cccccccc-0123-4567-890a-bcdef0123456"
++	resetRunExecution            = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: resetRunID}
+ 
+ 	version         = int64(12)
+ 	branchToken     = []byte("other random branch token")
+@@ -391,6 +393,58 @@
+ 			},
+ 		},
+ 		{
++			// previous (base) was reset by this request into reset run, which then continued
++			// as new into latest: the retry must not reset previous again.
++			name:    "Duplicate Request after the reset run continued as new",
++			request: resetExecutionRequest(previousExecution, 24),
++			init: []InitFn{
++				withCurrentExecution(latestExecution),
++				withState(latestExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:        constants.TestDomainID,
++						WorkflowID:      constants.TestWorkflowID,
++						RunID:           latestRunID,
++						NextEventID:     26,
++						CreateRequestID: "continue-as-new-request",
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withState(previousExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:    constants.TestDomainID,
++						WorkflowID:  constants.TestWorkflowID,
++						RunID:       previousRunID,
++						NextEventID: 26,
++						BranchToken: branchToken,
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withState(resetRunExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:        constants.TestDomainID,
++						WorkflowID:      constants.TestWorkflowID,
++						RunID:           resetRunID,
++						NextEventID:     30,
++						CreateRequestID: testRequestID,
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withActiveClusterInfo(constants.TestDomainID, latestExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withActiveClusterInfo(constants.TestDomainID, previousExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withActiveClusterInfo(constants.TestDomainID, resetRunExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withStartEvent(resetRunID),
++				func(t *testing.T, engine *testdata.EngineForTest) {
++					ctrl := gomock.NewController(t)
++					mockResetter := reset.NewMockWorkflowResetter(ctrl)
++					engine.Engine.(*historyEngineImpl).workflowResetter = mockResetter
++					mockResetter.EXPECT().ResetWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
++				},
++			},
++			expected: &types.ResetWorkflowExecutionResponse{
++				RunID: latestRunID,
++			},
++		},
++		{
+ 			name:    "Success",
+ 			request: resetExecutionRequest(latestExecution, 24),
+ 			init: []InitFn{
+@@ -535,6 +589,7 @@
+ 				}),
+ 				withActiveClusterInfo(constants.TestDomainID, latestExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
+ 				withHistoryPagination(branchToken, 24),
++				withStartEvent(""),
+ 				func(t *testing.T, engine *testdata.EngineForTest) {
+ 					ctrl := gomock.NewController(t)
+ 					mockResetter := reset.NewMockWorkflowResetter(ctrl)
+@@ -725,6 +780,9 @@
+ 			if testCase.expectedErr == nil {
+ 				if assert.NotNil(t, result) {
+ 					assert.NotEmpty(t, result.RunID)
++					if testCase.expected != nil {
++						assert.Equal(t, testCase.expected.RunID, result.RunID)
++					}
+ 				}
+ 				assert.NoError(t, err)
+ 			} else {
+@@ -1010,6 +1068,22 @@
+ 	}
+ }
+ 
++// withStartEvent makes every history read return a WorkflowExecutionStarted event that
++// continued from continuedFromRunID ("" for none).
++func withStartEvent(continuedFromRunID string) InitFn {
++	return func(t *testing.T, engine *testdata.EngineForTest) {
++		engine.ShardCtx.GetHistoryManager().(*mocks.HistoryV2Manager).On("ReadHistoryBranch", mock.Anything, mock.Anything).Return(&persistence.ReadHistoryBranchResponse{
++			HistoryEvents: []*types.HistoryEvent{{
++				ID:        commonconstants.FirstEventID,
++				EventType: types.EventTypeWorkflowExecutionStarted.Ptr(),
++				WorkflowExecutionStartedEventAttributes: &types.WorkflowExecutionStartedEventAttributes{
++					ContinuedExecutionRunID: continuedFromRunID,
++				},
++			}},
++		}, nil)
++	}
++}
++
+ func withCurrentExecution(execution *types.WorkflowExecution) InitFn {
+ 	return func(_ *testing.T, engine *testdata.EngineForTest) {
+ 		engine.ShardCtx.Resource.ExecutionMgr.On("GetCurrentExecution", mock.Anything, mock.Anything).Return(&persistence.GetCurrentExecutionResponse{

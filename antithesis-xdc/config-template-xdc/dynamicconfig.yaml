@@ -1,0 +1,45 @@
+# Testing-oriented dynamic config: class-level tuning only (no source changes, nothing bug-specific).
+system.minRetentionDays:
+  - value: 0
+# Small mutable-state cache: workflow state is reloaded from the DB often.
+history.cacheMaxSize:
+  - value: 20
+history.cacheTTL:
+  - value: 30s
+# Several partitions per task list: exercises partition forwarding.
+matching.numTasklistWritePartitions:
+  - value: 3
+matching.numTasklistReadPartitions:
+  - value: 3
+matching.idleTasklistCheckInterval:
+  - value: 20s
+matching.updateAckInterval:
+  - value: 5s
+history.shardUpdateMinInterval:
+  - value: 1s
+history.timerProcessorUpdateAckInterval:
+  - value: 5s
+history.transferProcessorUpdateAckInterval:
+  - value: 5s
+# Kills and stops behave like crashes rather than graceful drains.
+frontend.shutdownDrainDuration:
+  - value: 0s
+history.shutdownDrainDuration:
+  - value: 0s
+# Bound decision-heartbeat chains (default 30m) so a stalled heartbeat loop ends within a timeline;
+# the driver detects such loops separately ("a workflow heartbeats decisions without progress").
+history.decisionHeartbeatTimeout:
+  - value: 1m
+# ---------- cross-cluster replication (XDC) ----------
+# Replication is pull-based over the frontends' admin API (no Kafka): each history shard fetches
+# replication tasks from the other cluster, and the worker service pulls domain replication messages.
+# Shorter waits than the defaults, so replication catches up quickly after a fault ends.
+history.ReplicationTaskFetcherServiceBusyWait:
+  - value: 5s
+history.ReplicationTaskProcessorShardQPS:
+  - value: 50
+# Failovers are rare (driver cooldown >= 60 s); keep Cadence's own cooldown below that.
+frontend.failoverCoolDown:
+  - value: 10s
+frontend.domainFailoverRefreshInterval:
+  - value: 5s

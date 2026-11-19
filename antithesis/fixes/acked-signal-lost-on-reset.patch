@@ -1,0 +1,306 @@
+From a7da2f80c29e5eb0940066b9a6410d7051a9f875 Mon Sep 17 00:00:00 2001
+From: x <x@x>
+Date: Wed, 18 Nov 2026 20:43:33 +0000
+Subject: [PATCH] fix(reset): reapply buffered signals flushed by terminating
+ the current run
+
+When base == current and a decision is in flight, signals received during the
+decision are buffered. Terminating the current run for the reset fails the
+decision and flushes them into the terminated run with IDs >= the captured
+next event ID, outside the persisted range that is reapplied. Collect those
+flushed events and reapply them when the reset chain reaches the current run.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ service/history/reset/resetter.go      |  42 +++++++
+ service/history/reset/resetter_test.go | 155 +++++++++++++++++++++++++
+ 2 files changed, 197 insertions(+)
+
+diff --git a/service/history/reset/resetter.go b/service/history/reset/resetter.go
+index 55260399e..9564f9a04 100644
+--- a/service/history/reset/resetter.go
++++ b/service/history/reset/resetter.go
+@@ -135,6 +135,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
+ 	}
+ 
+ 	currentWorkflowTerminated := false
++	var currentFlushedEvents []*types.HistoryEvent
+ 	if currentMutableState.IsWorkflowExecutionRunning() {
+ 		if err := r.terminateWorkflow(
+ 			currentMutableState,
+@@ -144,6 +145,11 @@ func (r *workflowResetterImpl) ResetWorkflow(
+ 		}
+ 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
+ 		currentWorkflowTerminated = true
++		// Terminating the current run fails its in-flight decision, which flushes
++		// buffered events (e.g. signals received while the decision was running)
++		// into the current run with IDs >= currentNextEventID. Those events are not
++		// in persisted history yet, so collect them here for reapplication.
++		currentFlushedEvents = getFlushedEvents(currentMutableState, currentNextEventID)
+ 	}
+ 
+ 	resetWorkflow, err := r.prepareResetWorkflow(
+@@ -164,6 +170,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
+ 		currentRunID,
+ 		currentNextEventID,
+ 		currentBranchToken,
++		currentFlushedEvents,
+ 	)
+ 	if err != nil {
+ 		return err
+@@ -196,6 +203,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
+ 	currentRunID string,
+ 	currentNextEventID int64,
+ 	currentBranchToken []byte,
++	currentFlushedEvents []*types.HistoryEvent,
+ ) (execution.Workflow, error) {
+ 
+ 	resetWorkflow, err := r.replayResetWorkflow(
+@@ -260,6 +268,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
+ 			currentRunID,
+ 			currentNextEventID,
+ 			currentBranchToken,
++			currentFlushedEvents,
+ 		); err != nil {
+ 			return nil, err
+ 		}
+@@ -496,6 +505,7 @@ func (r *workflowResetterImpl) reapplyResetAndContinueAsNewWorkflowEvents(
+ 	currentRunID string,
+ 	currentNextEventID int64,
+ 	currentBranchToken []byte,
++	currentFlushedEvents []*types.HistoryEvent,
+ ) error {
+ 
+ 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
+@@ -514,6 +524,7 @@ func (r *workflowResetterImpl) reapplyResetAndContinueAsNewWorkflowEvents(
+ 	); err != nil {
+ 		return err
+ 	}
++	reachedCurrentRun := baseRunID == currentRunID
+ 
+ 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
+ 		// The caller (processResetWorkflow) already holds the execution context lock for
+@@ -553,6 +564,9 @@ func (r *workflowResetterImpl) reapplyResetAndContinueAsNewWorkflowEvents(
+ 
+ 	// second for remaining continue as new workflow, reapply eligible events
+ 	for len(nextRunID) != 0 {
++		if nextRunID == currentRunID {
++			reachedCurrentRun = true
++		}
+ 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
+ 		if err != nil {
+ 			return err
+@@ -568,9 +582,37 @@ func (r *workflowResetterImpl) reapplyResetAndContinueAsNewWorkflowEvents(
+ 			return err
+ 		}
+ 	}
++
++	// finally, the events flushed into the current run by its termination (buffered
++	// signals); they come after all of its persisted events read above.
++	if reachedCurrentRun {
++		if err := r.reapplyEvents(resetMutableState, currentFlushedEvents); err != nil {
++			return err
++		}
++	}
+ 	return nil
+ }
+ 
++// getFlushedEvents returns the events in the mutable state's pending (not yet
++// persisted) history batch whose ID is >= nextEventID, i.e. those added after
++// nextEventID was captured, including buffered events flushed by FailDecision.
++func getFlushedEvents(
++	mutableState execution.MutableState,
++	nextEventID int64,
++) []*types.HistoryEvent {
++	historyBuilder := mutableState.GetHistoryBuilder()
++	if historyBuilder == nil {
++		return nil
++	}
++	var events []*types.HistoryEvent
++	for _, event := range historyBuilder.GetHistory().Events {
++		if event.ID >= nextEventID {
++			events = append(events, event)
++		}
++	}
++	return events
++}
++
+ func (r *workflowResetterImpl) reapplyWorkflowEvents(
+ 	ctx context.Context,
+ 	mutableState execution.MutableState,
+diff --git a/service/history/reset/resetter_test.go b/service/history/reset/resetter_test.go
+index 9299f54ea..aaf9af18f 100644
+--- a/service/history/reset/resetter_test.go
++++ b/service/history/reset/resetter_test.go
+@@ -506,6 +506,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
+ 		currentRunID,
+ 		currentNextEventID,
+ 		currentBranchToken,
++		nil,
+ 	)
+ 	s.NoError(err)
+ }
+@@ -624,6 +625,160 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_CurrentRu
+ 		currentRunID,
+ 		currentNextEventID,
+ 		currentBranchToken,
++		nil,
++	)
++	s.NoError(err)
++}
++
++func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_BaseIsCurrent_BufferedSignal() {
++	// Regression test: base == current, a decision is in flight and a signal arrived
++	// during it, so the signal sat in the current run's buffered events (no event ID,
++	// not counted in NextEventID). Terminating the current run for the reset fails the
++	// decision and flushes that signal into the base run with ID >= currentNextEventID.
++	// It is not in the persisted range [baseRebuildNextEventID, baseNextEventID), so it
++	// must be reapplied from the flushed events, or the acknowledged signal is lost.
++	ctx := context.Background()
++	domainName := "test-domain"
++	baseRebuildNextEventID := int64(20)
++	currentNextEventID := int64(25)
++	currentBranchToken := []byte("some random current branch token")
++
++	persistedSignal := &types.HistoryEvent{
++		ID:        22,
++		EventType: types.EventTypeWorkflowExecutionSignaled.Ptr(),
++		WorkflowExecutionSignaledEventAttributes: &types.WorkflowExecutionSignaledEventAttributes{
++			SignalName: "persisted signal",
++			Input:      []byte("persisted input"),
++			Identity:   "client",
++			RequestID:  "persisted-request-id",
++		},
++	}
++	persistedEvents := []*types.HistoryEvent{
++		{ID: 20, EventType: types.EventTypeDecisionTaskCompleted.Ptr(), DecisionTaskCompletedEventAttributes: &types.DecisionTaskCompletedEventAttributes{}},
++		{ID: 21, EventType: types.EventTypeActivityTaskScheduled.Ptr(), ActivityTaskScheduledEventAttributes: &types.ActivityTaskScheduledEventAttributes{}},
++		persistedSignal,
++		{ID: 23, EventType: types.EventTypeDecisionTaskScheduled.Ptr(), DecisionTaskScheduledEventAttributes: &types.DecisionTaskScheduledEventAttributes{}},
++		{ID: 24, EventType: types.EventTypeDecisionTaskStarted.Ptr(), DecisionTaskStartedEventAttributes: &types.DecisionTaskStartedEventAttributes{}},
++	}
++	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", mock.Anything, &persistence.ReadHistoryBranchRequest{
++		BranchToken:   currentBranchToken,
++		MinEventID:    baseRebuildNextEventID,
++		MaxEventID:    currentNextEventID,
++		PageSize:      execution.NDCDefaultPageSize,
++		NextPageToken: nil,
++		ShardID:       common.IntPtr(s.mockShard.GetShardID()),
++		DomainName:    domainName,
++	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
++		History:       []*types.History{{Events: persistedEvents}},
++		NextPageToken: nil,
++	}, nil).Once()
++	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(domainName, nil).AnyTimes()
++
++	// Pending batch of the current run after terminateWorkflow: the forced
++	// DecisionTaskFailed, the flushed buffered signal, and the termination event.
++	bufferedSignal := &types.HistoryEvent{
++		ID:        26,
++		EventType: types.EventTypeWorkflowExecutionSignaled.Ptr(),
++		WorkflowExecutionSignaledEventAttributes: &types.WorkflowExecutionSignaledEventAttributes{
++			SignalName: "buffered signal",
++			Input:      []byte("buffered input"),
++			Identity:   "client",
++			RequestID:  "buffered-request-id",
++		},
++	}
++	pendingBatch := []*types.HistoryEvent{
++		{ID: 25, EventType: types.EventTypeDecisionTaskFailed.Ptr(), DecisionTaskFailedEventAttributes: &types.DecisionTaskFailedEventAttributes{}},
++		bufferedSignal,
++		{ID: 27, EventType: types.EventTypeWorkflowExecutionTerminated.Ptr(), WorkflowExecutionTerminatedEventAttributes: &types.WorkflowExecutionTerminatedEventAttributes{}},
++	}
++	currentMutableState := execution.NewMockMutableState(s.controller)
++	currentMutableState.EXPECT().GetHistoryBuilder().Return(
++		execution.NewHistoryBuilderFromEvents(pendingBatch, currentMutableState),
++	).Times(1)
++	flushedEvents := getFlushedEvents(currentMutableState, currentNextEventID)
++	s.Equal(pendingBatch, flushedEvents)
++
++	resetMutableState := execution.NewMockMutableState(s.controller)
++	resetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
++	gomock.InOrder(
++		resetMutableState.EXPECT().AddWorkflowExecutionSignaled(
++			"persisted signal", []byte("persisted input"), "client", "",
++		).Return(&types.HistoryEvent{}, nil).Times(1),
++		resetMutableState.EXPECT().AddSignalRequested("persisted-request-id").Times(1),
++		resetMutableState.EXPECT().AddWorkflowExecutionSignaled(
++			"buffered signal", []byte("buffered input"), "client", "",
++		).Return(&types.HistoryEvent{}, nil).Times(1),
++		resetMutableState.EXPECT().AddSignalRequested("buffered-request-id").Times(1),
++	)
++
++	// base == current: the current run lock is held by the caller, so nothing must
++	// be loaded through the execution cache.
++	err := s.workflowResetter.reapplyResetAndContinueAsNewWorkflowEvents(
++		ctx,
++		resetMutableState,
++		s.domainID,
++		s.workflowID,
++		s.currentRunID,
++		currentBranchToken,
++		baseRebuildNextEventID,
++		currentNextEventID,
++		s.currentRunID,
++		currentNextEventID,
++		currentBranchToken,
++		flushedEvents,
++	)
++	s.NoError(err)
++}
++
++func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_CurrentNotReached_FlushedEventsIgnored() {
++	// If the reset chain does not reach the current run (base is an unrelated run),
++	// signals flushed into the current run are not reapplied, matching the handling
++	// of the current run's persisted events.
++	ctx := context.Background()
++	domainName := "test-domain"
++	baseFirstEventID := int64(4)
++	baseNextEventID := int64(6)
++	baseBranchToken := []byte("some random base branch token")
++
++	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", mock.Anything, &persistence.ReadHistoryBranchRequest{
++		BranchToken:   baseBranchToken,
++		MinEventID:    baseFirstEventID,
++		MaxEventID:    baseNextEventID,
++		PageSize:      execution.NDCDefaultPageSize,
++		NextPageToken: nil,
++		ShardID:       common.IntPtr(s.mockShard.GetShardID()),
++		DomainName:    domainName,
++	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
++		History: []*types.History{{Events: []*types.HistoryEvent{
++			{ID: 4, EventType: types.EventTypeDecisionTaskCompleted.Ptr(), DecisionTaskCompletedEventAttributes: &types.DecisionTaskCompletedEventAttributes{}},
++			{ID: 5, EventType: types.EventTypeWorkflowExecutionTerminated.Ptr(), WorkflowExecutionTerminatedEventAttributes: &types.WorkflowExecutionTerminatedEventAttributes{}},
++		}}},
++		NextPageToken: nil,
++	}, nil).Once()
++	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(domainName, nil).AnyTimes()
++
++	resetMutableState := execution.NewMockMutableState(s.controller)
++	resetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
++
++	err := s.workflowResetter.reapplyResetAndContinueAsNewWorkflowEvents(
++		ctx,
++		resetMutableState,
++		s.domainID,
++		s.workflowID,
++		s.baseRunID,
++		baseBranchToken,
++		baseFirstEventID,
++		baseNextEventID,
++		s.currentRunID,
++		int64(10),
++		[]byte("some random current branch token"),
++		[]*types.HistoryEvent{{
++			ID:        11,
++			EventType: types.EventTypeWorkflowExecutionSignaled.Ptr(),
++			WorkflowExecutionSignaledEventAttributes: &types.WorkflowExecutionSignaledEventAttributes{
++				SignalName: "buffered signal",
++			},
++		}},
+ 	)
+ 	s.NoError(err)
+ }
+-- 
+2.43.0
+

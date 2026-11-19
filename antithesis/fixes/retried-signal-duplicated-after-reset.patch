@@ -1,0 +1,46 @@
+diff --git a/service/history/execution/mutable_state_builder_methods_signal.go b/service/history/execution/mutable_state_builder_methods_signal.go
+index c71ad7189..ccb383791 100644
+--- a/service/history/execution/mutable_state_builder_methods_signal.go
++++ b/service/history/execution/mutable_state_builder_methods_signal.go
+@@ -79,6 +79,11 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(
+ 
+ 	// Increment signal count in mutable state for this workflow execution
+ 	e.executionInfo.SignalCount++
++	// Keep the dedup set derivable from history, so a run rebuilt from events (reset,
++	// rebuild) still deduplicates retries of signals it already contains.
++	if requestID := event.WorkflowExecutionSignaledEventAttributes.RequestID; requestID != "" {
++		e.AddSignalRequested(requestID)
++	}
+ 	e.insertWorkflowRequest(persistence.WorkflowRequest{
+ 		RequestID:   event.WorkflowExecutionSignaledEventAttributes.RequestID,
+ 		Version:     event.Version,
+diff --git a/service/history/reset/resetter.go b/service/history/reset/resetter.go
+index 4a03e0826..55260399e 100644
+--- a/service/history/reset/resetter.go
++++ b/service/history/reset/resetter.go
+@@ -637,6 +637,11 @@ func (r *workflowResetterImpl) reapplyEvents(
+ 			); err != nil {
+ 				return err
+ 			}
++			// The signal is carried into this run, so a client retry of the original
++			// SignalWorkflowExecution (same request ID) must be deduplicated here too.
++			if requestID := attr.GetRequestID(); requestID != "" {
++				mutableState.AddSignalRequested(requestID)
++			}
+ 		default:
+ 			// events other than signal will be ignored
+ 		}
+diff --git a/service/history/reset/resetter_test.go b/service/history/reset/resetter_test.go
+index eb9ce9b42..9299f54ea 100644
+--- a/service/history/reset/resetter_test.go
++++ b/service/history/reset/resetter_test.go
+@@ -792,6 +792,9 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
+ 				attr.GetIdentity(),
+ 				"",
+ 			).Return(&types.HistoryEvent{}, nil).Times(1)
++			if attr.GetRequestID() != "" {
++				mutableState.EXPECT().AddSignalRequested(attr.GetRequestID()).Times(1)
++			}
+ 		}
+ 	}
+ 

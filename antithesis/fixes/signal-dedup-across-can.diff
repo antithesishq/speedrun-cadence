@@ -1,0 +1,15 @@
+--- a/service/history/execution/mutable_state_builder.go
++++ b/service/history/execution/mutable_state_builder.go
+@@ -1301,6 +1301,12 @@
+ 	); err != nil {
+ 		return nil, nil, &types.InternalServiceError{Message: "Failed to add workflow execution started event."}
+ 	}
++	// Carry the signal dedup set into the new run: a client retry of a signal this run
++	// already applied (and passed on in the continue-as-new input) is routed to the new
++	// current run and must still be deduplicated there.
++	for requestID := range e.pendingSignalRequestedIDs {
++		newStateBuilder.AddSignalRequested(requestID)
++	}
+ 
+ 	if err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(
+ 		firstEventID,

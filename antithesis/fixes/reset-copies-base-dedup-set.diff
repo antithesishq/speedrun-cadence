@@ -1,0 +1,81 @@
+--- a/service/history/reset/resetter.go
++++ b/service/history/reset/resetter.go
+@@ -223,6 +223,14 @@
+ 
+ 	resetMutableState := resetWorkflow.GetMutableState()
+ 
++	// The rebuild derives the dedup set from the copied history, but signals that an earlier
++	// reset reapplied into the base run carry no request ID in history: their IDs exist only
++	// in the base run's dedup set. Carry that set over, or a client retry of such a signal
++	// is applied again once a second reset copies it.
++	if err := r.copySignalRequestedIDs(ctx, domainID, workflowID, baseRunID, resetMutableState); err != nil {
++		return nil, err
++	}
++
+ 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
+ 	if baseLastEventVersion > resetWorkflowVersion {
+ 		return nil, &types.InternalServiceError{
+@@ -342,6 +350,32 @@
+ 	)
+ }
+ 
++// copySignalRequestedIDs adds the base run's persisted signal dedup set to the reset run.
++func (r *workflowResetterImpl) copySignalRequestedIDs(
++	ctx context.Context,
++	domainID string,
++	workflowID string,
++	baseRunID string,
++	resetMutableState execution.MutableState,
++) error {
++	domainName, err := r.domainCache.GetDomainName(domainID)
++	if err != nil {
++		return err
++	}
++	resp, err := r.shard.GetExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
++		DomainID:   domainID,
++		Execution:  types.WorkflowExecution{WorkflowID: workflowID, RunID: baseRunID},
++		DomainName: domainName,
++	})
++	if err != nil {
++		return err
++	}
++	for requestID := range resp.State.SignalRequestedIDs {
++		resetMutableState.AddSignalRequested(requestID)
++	}
++	return nil
++}
++
+ func (r *workflowResetterImpl) replayResetWorkflow(
+ 	ctx context.Context,
+ 	domainID string,
+--- a/service/history/reset/resetter_test.go
++++ b/service/history/reset/resetter_test.go
+@@ -957,6 +957,28 @@
+ 	s.NoError(err)
+ }
+ 
++func (s *workflowResetterSuite) TestCopySignalRequestedIDs() {
++	// the base run holds the dedup ID of a signal that an earlier reset reapplied (the
++	// reapplied event in its history has no request ID)
++	domainName := uuid.New()
++	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(s.domainID).Return(domainName, nil).AnyTimes()
++	s.mockShard.Resource.ExecutionMgr.On("GetWorkflowExecution", mock.Anything, &persistence.GetWorkflowExecutionRequest{
++		DomainID:   s.domainID,
++		Execution:  types.WorkflowExecution{WorkflowID: s.workflowID, RunID: s.baseRunID},
++		DomainName: domainName,
++	}).Return(&persistence.GetWorkflowExecutionResponse{
++		State: &persistence.WorkflowMutableState{
++			SignalRequestedIDs: map[string]struct{}{"reapplied-signal-request-id": {}},
++		},
++	}, nil).Once()
++
++	resetMutableState := execution.NewMockMutableState(s.controller)
++	resetMutableState.EXPECT().AddSignalRequested("reapplied-signal-request-id").Times(1)
++
++	err := s.workflowResetter.copySignalRequestedIDs(context.Background(), s.domainID, s.workflowID, s.baseRunID, resetMutableState)
++	s.NoError(err)
++}
++
+ func (s *workflowResetterSuite) TestPagination() {
+ 	firstEventID := commonconstants.FirstEventID
+ 	nextEventID := int64(101)

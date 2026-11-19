@@ -1,0 +1,72 @@
+ Network cadence-xdc_net  Creating
+ Network cadence-xdc_net  Created
+ Volume cadence-xdc_clients  Creating
+ Volume cadence-xdc_clients  Created
+ Container xclient1  Creating
+ Container xclient3  Creating
+ Container c1-postgres  Creating
+ Container xclient2  Creating
+ Container c0-postgres  Creating
+ Container xdriver  Creating
+ Container xclient2  Created
+ Container xclient3  Created
+ Container xdriver  Created
+ Container xclient1  Created
+ Container c0-postgres  Created
+ Container c0-schema  Creating
+ Container c1-postgres  Created
+ Container c1-schema  Creating
+ Container c0-schema  Created
+ Container c0-cadence1  Creating
+ Container c0-cadence2  Creating
+ Container c1-schema  Created
+ Container c1-cadence2  Creating
+ Container c1-cadence1  Creating
+ Container c0-cadence2  Created
+ Container c0-cadence1  Created
+ Container c1-cadence1  Created
+ Container c1-cadence2  Created
+ Container xdriver  Starting
+ Container xclient1  Starting
+ Container c1-postgres  Starting
+ Container xclient2  Starting
+ Container xclient3  Starting
+ Container c0-postgres  Starting
+ Container xdriver  Started
+ Container c1-postgres  Started
+ Container c1-schema  Starting
+ Container c0-postgres  Started
+ Container c0-schema  Starting
+ Container xclient2  Started
+ Container xclient1  Started
+ Container xclient3  Started
+ Container c1-schema  Started
+ Container c1-schema  Waiting
+ Container c1-schema  Waiting
+ Container c0-schema  Started
+ Container c0-schema  Waiting
+ Container c0-schema  Waiting
+ Container c1-schema  Exited
+ Container c1-schema  Exited
+ Container c1-cadence1  Starting
+ Container c1-cadence2  Starting
+ Container c0-schema  Exited
+ Container c0-cadence1  Starting
+ Container c0-schema  Exited
+ Container c0-cadence2  Starting
+ Container c1-cadence2  Started
+ Container c0-cadence2  Started
+ Container c0-cadence1  Started
+ Container c1-cadence1  Started
+waiting for setup complete
+setup complete; running 240 s
+ xdriver copy xdriver:/tmp/sdk.jsonl to /home/exedev/cadence/antithesis-xdc/scratchbook/logs/local-master-20261118T205029/sdk.jsonl Copying
+ xdriver copy xdriver:/tmp/sdk.jsonl to /home/exedev/cadence/antithesis-xdc/scratchbook/logs/local-master-20261118T205029/sdk.jsonl Copied
+49
+FAIL	Reachable	hits=0	pass=0	a client restarts
+FAIL	Sometimes	hits=0	pass=0	a global domain fails over to cluster0
+FAIL	Sometimes	hits=0	pass=0	a graceful failover is accepted
+FAIL	Sometimes	hits=1	pass=0	a signal with an unknown outcome is applied
+FAIL	Sometimes	hits=0	pass=0	a start returns an unknown outcome
+FAIL	Always	hits=2	pass=1	an acknowledged signal is applied exactly once
+/home/exedev/cadence/antithesis-xdc/scratchbook/logs/local-master-20261118T205029

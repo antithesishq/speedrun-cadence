@@ -1,0 +1,108 @@
+log:
+  stdout: true
+  level: info
+persistence:
+  numHistoryShards: 8
+  defaultStore: default
+  visibilityStore: visibility
+  datastores:
+    default:
+      sql:
+        pluginName: "postgres"
+        encodingType: "thriftrw"
+        decodingTypes: ["thriftrw"]
+        databaseName: "cadence"
+        connectAddr: "c1-postgres:5432"
+        connectProtocol: "tcp"
+        user: "cadence"
+        password: "cadence"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+    visibility:
+      sql:
+        pluginName: "postgres"
+        encodingType: "thriftrw"
+        decodingTypes: ["thriftrw"]
+        databaseName: "cadence_visibility"
+        connectAddr: "c1-postgres:5432"
+        connectProtocol: "tcp"
+        user: "cadence"
+        password: "cadence"
+        maxConns: 10
+        maxIdleConns: 10
+        maxConnLifetime: "1h"
+ringpop:
+  name: cadence_cluster1
+  broadcastAddress: __HOST_IP__
+  bootstrapMode: hosts
+  bootstrapHosts:
+    - 10.30.30.21:7933
+    - 10.30.30.21:7934
+    - 10.30.30.21:7935
+    - 10.30.30.21:7939
+    - 10.30.30.22:7933
+    - 10.30.30.22:7934
+    - 10.30.30.22:7935
+    - 10.30.30.22:7939
+  maxJoinDuration: 30s
+services:
+  frontend:
+    rpc:
+      port: 7933
+      grpcPort: 7833
+      bindOnIP: __HOST_IP__
+  matching:
+    rpc:
+      port: 7935
+      grpcPort: 7835
+      bindOnIP: __HOST_IP__
+  history:
+    rpc:
+      port: 7934
+      grpcPort: 7834
+      bindOnIP: __HOST_IP__
+  worker:
+    rpc:
+      port: 7939
+      bindOnIP: __HOST_IP__
+clusterGroupMetadata:
+  failoverVersionIncrement: 10
+  primaryClusterName: "cluster0"
+  currentClusterName: "cluster1"
+  # Requests for a global domain that reach the passive cluster are forwarded to the active one.
+  clusterRedirectionPolicy:
+    policy: "all-domain-apis-forwarding"
+  clusterGroup:
+    cluster0:
+      enabled: true
+      initialFailoverVersion: 0
+      rpcName: "cadence-frontend"
+      # Own cluster: this node's frontend. Other cluster: a DNS name that resolves to both of its
+      # frontends (Docker network alias); Cadence's DNS peer chooser round-robins and refreshes it.
+      rpcAddress: "cluster0-frontend:7833"
+      rpcTransport: "grpc"
+    cluster1:
+      enabled: true
+      initialFailoverVersion: 2
+      rpcName: "cadence-frontend"
+      rpcAddress: "__HOST_IP__:7833"
+      rpcTransport: "grpc"
+archival:
+  history:
+    status: "disabled"
+  visibility:
+    status: "disabled"
+domainDefaults:
+  archival:
+    history:
+      status: "disabled"
+    visibility:
+      status: "disabled"
+publicClient:
+  hostPort: "__HOST_IP__:7833"
+dynamicconfig:
+  client: filebased
+  filebased:
+    filepath: "/config/dynamicconfig.yaml"
+    pollInterval: "10s"

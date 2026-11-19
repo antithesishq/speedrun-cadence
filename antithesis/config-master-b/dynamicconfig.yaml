@@ -1,0 +1,28 @@
+# Testing-oriented dynamic config: class-level tuning only (no source changes, nothing bug-specific).
+system.minRetentionDays:
+  - value: 0
+# Small mutable-state cache: workflow state is reloaded from the DB often.
+# Several partitions per task list: exercises partition forwarding.
+matching.numTasklistWritePartitions:
+  - value: 1
+matching.numTasklistReadPartitions:
+  - value: 1
+matching.idleTasklistCheckInterval:
+  - value: 20s
+matching.updateAckInterval:
+  - value: 5s
+history.shardUpdateMinInterval:
+  - value: 1s
+history.timerProcessorUpdateAckInterval:
+  - value: 5s
+history.transferProcessorUpdateAckInterval:
+  - value: 5s
+# Kills and stops behave like crashes rather than graceful drains.
+frontend.shutdownDrainDuration:
+  - value: 0s
+history.shutdownDrainDuration:
+  - value: 0s
+# Bound decision-heartbeat chains (default 30m) so a stalled heartbeat loop ends within a timeline;
+# the driver detects such loops separately ("a workflow heartbeats decisions without progress").
+history.decisionHeartbeatTimeout:
+  - value: 1m

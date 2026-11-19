@@ -1,0 +1,28 @@
+2026-11-18T19:12:42Z	89a272ed819536288c2f7b7835443da6-67-6	v1.4.5	48	standard	high_availability	iter-1: first run, full fault set
+2026-11-18T19:13:19Z	0a677a0182adaad0264734a959537e64-67-6	master	48	standard	high_availability	iter-1: first run, full fault set
+2026-11-18T19:18:35Z	22fa5e0b537415326992eb290a37b6da-67-6	prefix	48	standard	high_availability	prefix-1: known-bug check, first pre-fix run
+2026-11-18T19:42:18Z	7f0adefd7acfd6c480f68d6c321e5f90-67-6	v1.4.5	48	standard	high_availability	iter-2: supervisor entrypoint, worker auto-start, checker fixes
+2026-11-18T19:42:47Z	90e135dd875582a665851848b5ccca95-67-6	master	48	standard	high_availability	iter-2: supervisor entrypoint, worker auto-start, checker fixes
+2026-11-18T19:43:08Z	fc9ee8d0ec38fb67d714b41fca31a6d3-67-6	prefix	48	standard	high_availability	iter-2: supervisor entrypoint, worker auto-start, checker fixes
+2026-11-18T19:46:33Z	6e868ff1a0ea33104c55aee1a6f6af93-67-6	v1.4.5	100	standard	high_availability	iter-3: timer-canceled check, eventually finish fix, rpc logs
+2026-11-18T19:46:53Z	02612d747fcd6eae4be6f8e6c5c95f99-67-6	master	100	standard	high_availability	iter-3: timer-canceled check, eventually finish fix, rpc logs
+2026-11-18T19:47:35Z	0dc3db5a45f56d0b81c3e7e474252a51-67-6	prefix	200	standard	high_availability	prefix-3: known-bug check with timer-canceled check
+2026-11-18T19:56:09Z	7955602fabbe861dfc4c63b9314f45b8-67-6	v1.4.5	100	standard	high_availability	iter-4: run-attribution and cancel checker fixes
+2026-11-18T19:56:58Z	815b813d55dad0911d777ecef231977c-67-6	master	100	standard	high_availability	iter-4: run-attribution and cancel checker fixes
+2026-11-18T20:11:24Z	90246acc1a1bdee18be05fe17b060fb0-67-6	v1.4.5	100	standard	high_availability	iter-5: postgres timeouts, reset/reuse checker fixes, heartbeat-loop detector
+2026-11-18T20:11:46Z	8dc5147c0a6ed344526054c64911d775-67-6	master	100	standard	high_availability	iter-5: postgres timeouts, reset/reuse checker fixes, heartbeat-loop detector
+2026-11-18T20:12:17Z	42ce02a1621ec2c81622b2897130d18f-67-6	fixverify	100	standard	high_availability	fixverify-1: v1.4.5 + reset signal-dedup fix + stop-during-start nil guards
+2026-11-18T20:23:17Z	bc2c03214b9be2639495563b99d97391-67-6	master	150	standard	high_availability	iter-6: result reads pinned to current run, reset-base tracking
+2026-11-18T20:23:36Z	ad86b559f9a171820762e3d8da7687ea-67-6	fixverify	150	standard	high_availability	fixverify-2: v1.4.5+fixes, same workload as iter-6
+2026-11-18T20:27:50Z	5a1ac4c2ec4826322bcfc4b5a5842078-67-6	fixverify	150	standard	high_availability	fixverify-3: v1.4.5+fixes (complete nil guards), same workload as iter-6
+2026-11-18T20:29:24Z	f3f927373e9dff17bfad9fd1d1f1a923-67-6	v1.4.5	150	standard	high_availability	iter-7: matched trio (same images): current versions + fix-verify
+2026-11-18T20:29:52Z	75b0745bcdbcc355168db60a0ae5c940-67-6	master	150	standard	high_availability	iter-7: matched trio (same images): current versions + fix-verify
+2026-11-18T20:30:14Z	41bf06723b005a4e1c4cc37b560fb195-67-6	fixverify	150	standard	high_availability	iter-7: matched trio (same images): current versions + fix-verify
+2026-11-18T20:40:32Z	ccd99ed49a1e4fe7eaa55ad9563ba4cb-67-6	prefix	150	standard	high_availability	prefix-4: clean known-bug reproduction with current driver
+2026-11-18T20:46:45Z	f04f3907fc63a679646c90a9dc10c042-67-6	v1.4.5	600	standard	high_availability	hunt-1 v1.4.5: frozen hunt driver, 600 CH
+2026-11-18T20:47:06Z	bba4d2f05a517054ee304b6265bbc541-67-6	v1.4.5-b	600	standard	high_availability	hunt-1 v1.4.5-b: frozen hunt driver, 600 CH
+2026-11-18T20:47:28Z	3e9720ca9b0af483f161a74b98f29c60-67-6	master	600	standard	high_availability	hunt-1 master: frozen hunt driver, 600 CH
+2026-11-18T20:47:56Z	c26baba5062af99fb01cbb7300de3bc6-67-6	master-b	600	standard	high_availability	hunt-1 master-b: frozen hunt driver, 600 CH
+2026-11-18T20:48:48Z	1a0d055cc5831d95536f58a8dbed5d68-67-6	fixverify2	400	standard	high_availability	fixverify-4: v1.4.5 + all 3 fixes (reset dedup, reset lost-signal, stop-during-start), hunt driver
+2026-11-19T15:56:23Z	fc87ca1b65b52553e7c27afe9f6897ef-67-6	fixverify3	400	fast	high_availability	fixverify-5: v1.4.5 + complete patch set (v2 dedup, base dedup copy, reset dedup across CAN, acked-lost, stop-during-start, sql close)
+2026-11-19T16:01:55Z	37b22144050fa198dba4d8a45fe63b29-67-6	v1.4.5-hb	300	fast	high_availability	hb-1: v1.4.5 with default decisionHeartbeatTimeout (30m) to seek a second Go-client heartbeat stall

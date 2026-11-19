@@ -1,0 +1,299 @@
+diff --git a/service/history/engine/engineimpl/reset_workflow_execution.go b/service/history/engine/engineimpl/reset_workflow_execution.go
+index c21394316..60e4e0f58 100644
+--- a/service/history/engine/engineimpl/reset_workflow_execution.go
++++ b/service/history/engine/engineimpl/reset_workflow_execution.go
+@@ -39,6 +39,10 @@ import (
+ 
+ const (
+ 	DefaultPageSize = 100
++
++	// maxResetDedupLookback bounds how many continue-as-new predecessors of the current run
++	// are checked when deduplicating a retried reset request.
++	maxResetDedupLookback = 10
+ )
+ 
+ func (e *historyEngineImpl) ResetWorkflowExecution(
+@@ -122,7 +126,15 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
+ 	}
+ 
+ 	// dedup by requestID
+-	if currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestID() {
++	duplicate := currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestID()
++	if !duplicate && currentRunID != baseRunID {
++		// the run this reset created may already have continued as new
++		duplicate, err = e.isResetRunPredecessor(ctx, domainID, workflowID, baseRunID, currentMutableState, request.GetRequestID())
++		if err != nil {
++			return nil, err
++		}
++	}
++	if duplicate {
+ 		e.logger.Info("Duplicated reset request",
+ 			tag.WorkflowID(workflowID),
+ 			tag.WorkflowRunID(currentRunID),
+@@ -294,3 +306,51 @@ func checkResetEventType(events []*types.HistoryEvent, resetEventID int64) error
+ 
+ 	return fmt.Errorf("reset event ID %v not found in the history events", resetEventID)
+ }
++
++// isResetRunPredecessor reports whether a continue-as-new predecessor of the current run was
++// created by the reset with this request ID (its CreateRequestID is the reset request ID), i.e.
++// whether the reset was already applied and the run it created has since continued as new.
++// The walk stops at the base run: a run created by this reset starts after the base run.
++func (e *historyEngineImpl) isResetRunPredecessor(
++	ctx context.Context,
++	domainID string,
++	workflowID string,
++	baseRunID string,
++	currentMutableState execution.MutableState,
++	requestID string,
++) (bool, error) {
++	if requestID == "" {
++		return false, nil
++	}
++	mutableState := currentMutableState
++	for i := 0; i < maxResetDedupLookback; i++ {
++		startEvent, err := mutableState.GetStartEvent(ctx)
++		if err != nil {
++			return false, err
++		}
++		previousRunID := startEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunID()
++		if previousRunID == "" || previousRunID == baseRunID {
++			return false, nil
++		}
++		// A continue-as-new predecessor is closed and no longer changes, so it is read from
++		// the database without taking its lock (the base and current runs are already locked).
++		previousContext := execution.NewContext(
++			domainID,
++			types.WorkflowExecution{WorkflowID: workflowID, RunID: previousRunID},
++			e.shard,
++			e.executionManager,
++			e.logger,
++		)
++		mutableState, err = previousContext.LoadWorkflowExecution(ctx)
++		if err != nil {
++			if _, ok := err.(*types.EntityNotExistsError); ok {
++				return false, nil
++			}
++			return false, err
++		}
++		if mutableState.GetExecutionInfo().CreateRequestID == requestID {
++			return true, nil
++		}
++	}
++	return false, nil
++}
+diff --git a/service/history/engine/engineimpl/reset_workflow_execution_test.go b/service/history/engine/engineimpl/reset_workflow_execution_test.go
+index 5b2ac656e..ec28addb2 100644
+--- a/service/history/engine/engineimpl/reset_workflow_execution_test.go
++++ b/service/history/engine/engineimpl/reset_workflow_execution_test.go
+@@ -51,6 +51,8 @@ var (
+ 	latestExecution              = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: latestRunID}
+ 	previousRunID                = "bbbbbeef-0123-4567-890a-bcdef0123456"
+ 	previousExecution            = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: previousRunID}
++	resetRunID                   = "cccccccc-0123-4567-890a-bcdef0123456"
++	resetRunExecution            = &types.WorkflowExecution{WorkflowID: constants.TestWorkflowID, RunID: resetRunID}
+ 
+ 	version         = int64(12)
+ 	branchToken     = []byte("other random branch token")
+@@ -390,6 +392,58 @@ func TestResetWorkflowExecution(t *testing.T) {
+ 				RunID: latestRunID,
+ 			},
+ 		},
++		{
++			// previous (base) was reset by this request into reset run, which then continued
++			// as new into latest: the retry must not reset previous again.
++			name:    "Duplicate Request after the reset run continued as new",
++			request: resetExecutionRequest(previousExecution, 24),
++			init: []InitFn{
++				withCurrentExecution(latestExecution),
++				withState(latestExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:        constants.TestDomainID,
++						WorkflowID:      constants.TestWorkflowID,
++						RunID:           latestRunID,
++						NextEventID:     26,
++						CreateRequestID: "continue-as-new-request",
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withState(previousExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:    constants.TestDomainID,
++						WorkflowID:  constants.TestWorkflowID,
++						RunID:       previousRunID,
++						NextEventID: 26,
++						BranchToken: branchToken,
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withState(resetRunExecution, &persistence.WorkflowMutableState{
++					ExecutionInfo: &persistence.WorkflowExecutionInfo{
++						DomainID:        constants.TestDomainID,
++						WorkflowID:      constants.TestWorkflowID,
++						RunID:           resetRunID,
++						NextEventID:     30,
++						CreateRequestID: testRequestID,
++					},
++					ExecutionStats: &persistence.ExecutionStats{HistorySize: 1},
++				}),
++				withActiveClusterInfo(constants.TestDomainID, latestExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withActiveClusterInfo(constants.TestDomainID, previousExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withActiveClusterInfo(constants.TestDomainID, resetRunExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
++				withStartEvent(resetRunID),
++				func(t *testing.T, engine *testdata.EngineForTest) {
++					ctrl := gomock.NewController(t)
++					mockResetter := reset.NewMockWorkflowResetter(ctrl)
++					engine.Engine.(*historyEngineImpl).workflowResetter = mockResetter
++					mockResetter.EXPECT().ResetWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
++				},
++			},
++			expected: &types.ResetWorkflowExecutionResponse{
++				RunID: latestRunID,
++			},
++		},
+ 		{
+ 			name:    "Success",
+ 			request: resetExecutionRequest(latestExecution, 24),
+@@ -535,6 +589,7 @@ func TestResetWorkflowExecution(t *testing.T) {
+ 				}),
+ 				withActiveClusterInfo(constants.TestDomainID, latestExecution, &types.ActiveClusterInfo{ActiveClusterName: "test-active-cluster"}),
+ 				withHistoryPagination(branchToken, 24),
++				withStartEvent(""),
+ 				func(t *testing.T, engine *testdata.EngineForTest) {
+ 					ctrl := gomock.NewController(t)
+ 					mockResetter := reset.NewMockWorkflowResetter(ctrl)
+@@ -725,6 +780,9 @@ func TestResetWorkflowExecution(t *testing.T) {
+ 			if testCase.expectedErr == nil {
+ 				if assert.NotNil(t, result) {
+ 					assert.NotEmpty(t, result.RunID)
++					if testCase.expected != nil {
++						assert.Equal(t, testCase.expected.RunID, result.RunID)
++					}
+ 				}
+ 				assert.NoError(t, err)
+ 			} else {
+@@ -1010,6 +1068,22 @@ func withHistoryPagination(pageToken []byte, resetEventID int64) InitFn {
+ 	}
+ }
+ 
++// withStartEvent makes every history read return a WorkflowExecutionStarted event that
++// continued from continuedFromRunID ("" for none).
++func withStartEvent(continuedFromRunID string) InitFn {
++	return func(t *testing.T, engine *testdata.EngineForTest) {
++		engine.ShardCtx.GetHistoryManager().(*mocks.HistoryV2Manager).On("ReadHistoryBranch", mock.Anything, mock.Anything).Return(&persistence.ReadHistoryBranchResponse{
++			HistoryEvents: []*types.HistoryEvent{{
++				ID:        commonconstants.FirstEventID,
++				EventType: types.EventTypeWorkflowExecutionStarted.Ptr(),
++				WorkflowExecutionStartedEventAttributes: &types.WorkflowExecutionStartedEventAttributes{
++					ContinuedExecutionRunID: continuedFromRunID,
++				},
++			}},
++		}, nil)
++	}
++}
++
+ func withCurrentExecution(execution *types.WorkflowExecution) InitFn {
+ 	return func(_ *testing.T, engine *testdata.EngineForTest) {
+ 		engine.ShardCtx.Resource.ExecutionMgr.On("GetCurrentExecution", mock.Anything, mock.Anything).Return(&persistence.GetCurrentExecutionResponse{
+diff --git a/service/history/reset/resetter.go b/service/history/reset/resetter.go
+index be390da02..c6bb9914c 100644
+--- a/service/history/reset/resetter.go
++++ b/service/history/reset/resetter.go
+@@ -223,6 +223,14 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
+ 
+ 	resetMutableState := resetWorkflow.GetMutableState()
+ 
++	// The rebuild derives the dedup set from the copied history, but signals that an earlier
++	// reset reapplied into the base run carry no request ID in history: their IDs exist only
++	// in the base run's dedup set. Carry that set over, or a client retry of such a signal
++	// is applied again once a second reset copies it.
++	if err := r.copySignalRequestedIDs(ctx, domainID, workflowID, baseRunID, resetMutableState); err != nil {
++		return nil, err
++	}
++
+ 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
+ 	if baseLastEventVersion > resetWorkflowVersion {
+ 		return nil, &types.InternalServiceError{
+@@ -342,6 +350,32 @@ func (r *workflowResetterImpl) persistToDB(
+ 	)
+ }
+ 
++// copySignalRequestedIDs adds the base run's persisted signal dedup set to the reset run.
++func (r *workflowResetterImpl) copySignalRequestedIDs(
++	ctx context.Context,
++	domainID string,
++	workflowID string,
++	baseRunID string,
++	resetMutableState execution.MutableState,
++) error {
++	domainName, err := r.domainCache.GetDomainName(domainID)
++	if err != nil {
++		return err
++	}
++	resp, err := r.shard.GetExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
++		DomainID:   domainID,
++		Execution:  types.WorkflowExecution{WorkflowID: workflowID, RunID: baseRunID},
++		DomainName: domainName,
++	})
++	if err != nil {
++		return err
++	}
++	for requestID := range resp.State.SignalRequestedIDs {
++		resetMutableState.AddSignalRequested(requestID)
++	}
++	return nil
++}
++
+ func (r *workflowResetterImpl) replayResetWorkflow(
+ 	ctx context.Context,
+ 	domainID string,
+diff --git a/service/history/reset/resetter_test.go b/service/history/reset/resetter_test.go
+index bf62b37e6..90622dffb 100644
+--- a/service/history/reset/resetter_test.go
++++ b/service/history/reset/resetter_test.go
+@@ -962,6 +962,28 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
+ 	s.NoError(err)
+ }
+ 
++func (s *workflowResetterSuite) TestCopySignalRequestedIDs() {
++	// the base run holds the dedup ID of a signal that an earlier reset reapplied (the
++	// reapplied event in its history has no request ID)
++	domainName := uuid.New()
++	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(s.domainID).Return(domainName, nil).AnyTimes()
++	s.mockShard.Resource.ExecutionMgr.On("GetWorkflowExecution", mock.Anything, &persistence.GetWorkflowExecutionRequest{
++		DomainID:   s.domainID,
++		Execution:  types.WorkflowExecution{WorkflowID: s.workflowID, RunID: s.baseRunID},
++		DomainName: domainName,
++	}).Return(&persistence.GetWorkflowExecutionResponse{
++		State: &persistence.WorkflowMutableState{
++			SignalRequestedIDs: map[string]struct{}{"reapplied-signal-request-id": {}},
++		},
++	}, nil).Once()
++
++	resetMutableState := execution.NewMockMutableState(s.controller)
++	resetMutableState.EXPECT().AddSignalRequested("reapplied-signal-request-id").Times(1)
++
++	err := s.workflowResetter.copySignalRequestedIDs(context.Background(), s.domainID, s.workflowID, s.baseRunID, resetMutableState)
++	s.NoError(err)
++}
++
+ func (s *workflowResetterSuite) TestPagination() {
+ 	firstEventID := commonconstants.FirstEventID
+ 	nextEventID := int64(101)
+diff --git a/tools/sql/conn.go b/tools/sql/conn.go
+index 343af91c2..c53ebebba 100644
+--- a/tools/sql/conn.go
++++ b/tools/sql/conn.go
+@@ -116,9 +116,8 @@ func (c *Connection) DropDatabase(name string) error {
+ // Close closes the sql client
+ func (c *Connection) Close() {
+ 	if c.adminDb != nil {
+-		err := c.adminDb.Close()
+-		if err != nil {
+-			panic("cannot close connection")
+-		}
++		// A failed close (e.g. the server already dropped the connection) leaves nothing to
++		// clean up; crashing the server during startup over it is worse than ignoring it.
++		_ = c.adminDb.Close()
+ 	}
+ }

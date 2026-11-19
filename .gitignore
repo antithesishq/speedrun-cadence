@@ -1,0 +1,11 @@
+# Cadence source clones / worktrees (upstream code; patches live in antithesis/fixes/)
+src/
+# Raw Antithesis logs and command outputs (large; regenerate from the runs)
+antithesis/scratchbook/logs/
+antithesis-xdc/scratchbook/logs/
+# Build outputs
+antithesis-xdc/client/client
+antithesis-xdc/driver/driver
+antithesis/client/client
+antithesis/driver/driver
+*.tmp

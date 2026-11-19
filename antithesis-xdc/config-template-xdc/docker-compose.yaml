@@ -1,0 +1,194 @@
+# Two Cadence clusters (cluster0, cluster1) replicating one global domain. Names, project and subnet
+# differ from the single-cluster harness so both can run on one host.
+name: cadence-xdc
+services:
+
+  # ---------- cluster0 ----------
+  c0-postgres:
+    container_name: c0-postgres
+    hostname: c0-postgres
+    platform: linux/amd64
+    image: postgres:17.4
+    environment:
+      POSTGRES_USER: cadence
+      POSTGRES_PASSWORD: cadence
+    command: ["postgres", "-c", "max_connections=400", "-c", "idle_in_transaction_session_timeout=30s", "-c", "tcp_keepalives_idle=10", "-c", "tcp_keepalives_interval=5", "-c", "tcp_keepalives_count=3"]
+    networks:
+      net:
+        ipv4_address: 10.30.30.5
+  c0-schema:
+    container_name: c0-schema
+    hostname: c0-schema
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    entrypoint: ["/usr/local/bin/setup-schema.sh"]
+    environment:
+      PG_HOST: c0-postgres
+    depends_on: [c0-postgres]
+    networks:
+      net:
+        ipv4_address: 10.30.30.7
+
+  c0-cadence1:
+    container_name: c0-cadence1
+    hostname: c0-cadence1
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    environment:
+      SERVICES: frontend,history,matching,worker
+    volumes:
+      - ./cadence-c0.yaml:/config/cadence.yaml:ro
+      - ./dynamicconfig.yaml:/config/dynamicconfig.yaml:ro
+    depends_on:
+      c0-schema:
+        condition: service_completed_successfully
+    networks:
+      net:
+        ipv4_address: 10.30.30.11
+        aliases: [cluster0-frontend]
+
+  c0-cadence2:
+    container_name: c0-cadence2
+    hostname: c0-cadence2
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    environment:
+      SERVICES: frontend,history,matching,worker
+    volumes:
+      - ./cadence-c0.yaml:/config/cadence.yaml:ro
+      - ./dynamicconfig.yaml:/config/dynamicconfig.yaml:ro
+    depends_on:
+      c0-schema:
+        condition: service_completed_successfully
+    networks:
+      net:
+        ipv4_address: 10.30.30.12
+        aliases: [cluster0-frontend]
+
+  # ---------- cluster1 ----------
+  c1-postgres:
+    container_name: c1-postgres
+    hostname: c1-postgres
+    platform: linux/amd64
+    image: postgres:17.4
+    environment:
+      POSTGRES_USER: cadence
+      POSTGRES_PASSWORD: cadence
+    command: ["postgres", "-c", "max_connections=400", "-c", "idle_in_transaction_session_timeout=30s", "-c", "tcp_keepalives_idle=10", "-c", "tcp_keepalives_interval=5", "-c", "tcp_keepalives_count=3"]
+    networks:
+      net:
+        ipv4_address: 10.30.30.6
+  c1-schema:
+    container_name: c1-schema
+    hostname: c1-schema
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    entrypoint: ["/usr/local/bin/setup-schema.sh"]
+    environment:
+      PG_HOST: c1-postgres
+    depends_on: [c1-postgres]
+    networks:
+      net:
+        ipv4_address: 10.30.30.8
+
+  c1-cadence1:
+    container_name: c1-cadence1
+    hostname: c1-cadence1
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    environment:
+      SERVICES: frontend,history,matching,worker
+    volumes:
+      - ./cadence-c1.yaml:/config/cadence.yaml:ro
+      - ./dynamicconfig.yaml:/config/dynamicconfig.yaml:ro
+    depends_on:
+      c1-schema:
+        condition: service_completed_successfully
+    networks:
+      net:
+        ipv4_address: 10.30.30.21
+        aliases: [cluster1-frontend]
+
+  c1-cadence2:
+    container_name: c1-cadence2
+    hostname: c1-cadence2
+    platform: linux/amd64
+    image: cadence-server:__VERSION__
+    environment:
+      SERVICES: frontend,history,matching,worker
+    volumes:
+      - ./cadence-c1.yaml:/config/cadence.yaml:ro
+      - ./dynamicconfig.yaml:/config/dynamicconfig.yaml:ro
+    depends_on:
+      c1-schema:
+        condition: service_completed_successfully
+    networks:
+      net:
+        ipv4_address: 10.30.30.22
+        aliases: [cluster1-frontend]
+
+  # ---------- clients (stateful-clients pattern) and driver ----------
+
+  xclient1:
+    container_name: xclient1
+    hostname: xclient1
+    platform: linux/amd64
+    image: cadence-client-xdc:__CLIENT_TAG__
+    environment:
+      CADENCE_CLUSTER: cluster0
+      CADENCE_FRONTENDS: 10.30.30.11:7833,10.30.30.12:7833
+    volumes:
+      - clients:/clients
+    networks:
+      net:
+        ipv4_address: 10.30.30.31
+
+  xclient2:
+    container_name: xclient2
+    hostname: xclient2
+    platform: linux/amd64
+    image: cadence-client-xdc:__CLIENT_TAG__
+    environment:
+      CADENCE_CLUSTER: cluster0
+      CADENCE_FRONTENDS: 10.30.30.11:7833,10.30.30.12:7833
+    volumes:
+      - clients:/clients
+    networks:
+      net:
+        ipv4_address: 10.30.30.32
+
+  xclient3:
+    container_name: xclient3
+    hostname: xclient3
+    platform: linux/amd64
+    image: cadence-client-xdc:__CLIENT_TAG__
+    environment:
+      CADENCE_CLUSTER: cluster1
+      CADENCE_FRONTENDS: 10.30.30.21:7833,10.30.30.22:7833
+    volumes:
+      - clients:/clients
+    networks:
+      net:
+        ipv4_address: 10.30.30.33
+
+  driver:
+    container_name: xdriver
+    hostname: xdriver
+    platform: linux/amd64
+    image: cadence-driver-xdc:__DRIVER_TAG__
+    environment:
+      CLIENTS: xclient1,xclient2,xclient3
+      CLIENT_CLUSTERS: xclient1=cluster0,xclient2=cluster0,xclient3=cluster1
+    volumes:
+      - clients:/clients
+    networks:
+      net:
+        ipv4_address: 10.30.30.40
+volumes:
+  clients:
+networks:
+  net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.30.30.0/24
