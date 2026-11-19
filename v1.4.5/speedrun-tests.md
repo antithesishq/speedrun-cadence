@@ -167,3 +167,33 @@ to these.
 - [Guarantee 3](speedrun-report.md#guarantee-3): each history is read once per run, so the "an
   earlier read is a prefix of a later one" part is checked only through the close-event check
   (a read after the server reported the run closed must contain the close event).
+
+<a id="checks-that-were-stricter-than-cadence"></a>
+## Checks that were stricter than Cadence
+
+Triage of the long runs ([report](speedrun-report.md#what-the-long-runs-showed)) found that some
+checks, as run, were stricter than Cadence's documented behaviour. The corrections below are
+identified; the long runs and the fix checks used the code as listed above.
+
+- **Reused workflow IDs.** [`RuleReuseClosed`](../antithesis/driver/main.go#L687) starts a new run on
+  a closed ID while a signal, finish, cancel or terminate sent earlier to that ID (with no run ID) may
+  still be retrying inside the Go client. Cadence applies such a request to the run that is current
+  when it arrives, the new one, which the driver's model for the new run never asked for. Two
+  concurrent reuse attempts on the same ID, and a duplicate start that succeeded as the old run
+  closed, have the same effect. This produced the failures of "a second start of an open workflow ID
+  is rejected", "a start on a closed workflow ID follows its reuse policy", "a workflow ends only as
+  completed, or as canceled or terminated on request", "a workflow only applies signals that clients
+  sent", "a completed workflow returns the result its inputs determine", and part of "an
+  acknowledged signal is applied exactly once" and "a query shows each delivered signal once".
+  Correction: count in-flight requests per workflow and reuse an ID only when none remain, with a
+  grace period ([analysis](../antithesis/scratchbook/rca/hunt-unexpected-close.md#proposed-driver-fix)).
+- **Timer timing.** "a timer never fires before its duration" ([model.go:270](../antithesis/driver/model.go#L270))
+  compares two workflow clock readings with no tolerance, although the guarantee allows for the clock
+  jitter Antithesis injects. Correction: allow the jitter (steps of up to about 4 s were observed)
+  ([analysis](../antithesis/scratchbook/rca/hunt-timer-early.md#proposed-driver-fix-drivermodelgo267-271)).
+- **Eventually phase.** "every client is served again once faults stop" ran against containers that
+  the test environment had already shut down at the end of a timeline; "every started workflow closes
+  once faults stop" also counted workflows the driver itself had left unfinishable (a finish sent
+  before the start completed, a terminate on a run a failed reset had left in place, a read pinned to
+  a run the model does not own). Corrections are in the
+  [analysis](../antithesis/scratchbook/rca/hunt-liveness.md#notes-on-false-positive-review).

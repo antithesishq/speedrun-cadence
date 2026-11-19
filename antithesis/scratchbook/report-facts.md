@@ -65,3 +65,11 @@ Master hunt 3e9720ca counts now available: runs/props-3e9720ca.txt.
 
 ## XDC
 A two-cluster replication harness was built and validated locally (antithesis-xdc/README.md) but not run in Antithesis before the deadline.
+
+## Adversarial verdicts for findings 7–10 (all "stands")
+- buffered-signals-reordered-on-reload: stands, medium; Postgres-only; reproduces in all 5 runs incl. fix-verify (adversarial/buffered-signals-reordered-on-reload.md).
+- retried-signal-duplicated-after-continue-as-new: stands, medium; 587 duplicate examples across 5 runs, none in a single run, none with resets; hunt rates overstate production frequency (driver continues-as-new every 3–10 signals) (adversarial/retried-signal-duplicated-after-continue-as-new.md).
+- child-cancel-ack-after-close: stands, medium, liveness only; correction: the child cancel call timed out after committing (transfer_active_task_executor.go:610), the ack was recorded late by the transfer-task retry; same outcome (adversarial/child-cancel-ack-after-close.md).
+- sql-admin-conn-close-panic: stands, low; one incident with raw evidence; fix untested end to end (adversarial/sql-admin-conn-close-panic.md).
+Pending at second edition: fixverify-5 fc87ca1b (started 15:57Z, fast 400 CH) and hb-1 37b22144 (started 16:03Z, fast 300 CH).
+Repository: https://github.com/antithesishq/speedrun-cadence (public).

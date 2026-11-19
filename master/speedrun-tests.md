@@ -66,7 +66,7 @@ Guarantees are as in the [report](speedrun-report.md#guarantees). Each line link
 | a closed workflow appears in visibility once faults stop | Always | [Guarantee 6](speedrun-report.md#guarantee-6) | [main.go:679][a-m679] |
 | a workflow result can't be decoded | Unreachable | test sanity | [model.go:202][a-o202], [model.go:287][a-o287] |
 | a client can't run a request | Unreachable | test sanity | [rpc.go:115][a-r115] |
-| a cadence server process crashes | Unreachable | crash safety ([finding](speedrun-report.md#sigterm-during-startup-panics)) | [entrypoint.sh `report_crash`](../antithesis/server/entrypoint.sh) |
+| a cadence server process crashes | Unreachable | crash safety (findings: [shutdown panic](speedrun-report.md#sigterm-during-startup-panics), [connection-close panic](speedrun-report.md#sql-admin-conn-close-panic)) | [entrypoint.sh `report_crash`](../antithesis/server/entrypoint.sh) |
 
 "A workflow history is well formed" checks, per closed run: event IDs run 1..N, the first event is `WorkflowExecutionStarted`, a close event is last and (for a run reported closed) there is exactly one, each timer, activity and child resolves at most once and only after it started, and no signal is recorded twice ([model.go:434-497][d-historychecks]). A missing close event is reported separately, as "a history read after a workflow closed includes its close event".
 
