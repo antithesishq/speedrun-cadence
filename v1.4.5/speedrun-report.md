@@ -1,14 +1,12 @@
 # Cadence v1.4.5 under Antithesis: ten findings, led by acknowledged signals lost, duplicated or reordered around reset and continue-as-new
 
 **Prepared for:** Uber · **Tested:** 2026-11-18 to 2026-11-19 · **System:** Cadence v1.4.5 ([`ecd2b70c`][c-v145])
-**Document version:** third edition, written on 2026-11-19 after the deadline. It replaces the second
-edition, adding the results of its two confirmation runs: the
-[decision-heartbeat stall](#retried-decision-heartbeat-stalls-workflow) is confirmed in four more
-workflows, and the complete-patch-set fix check turned out not to test the reset patches, because one
-of our own patches broke every reset ([Fix checks](#fix-checks)). A fix check with the corrected
-patches was still running when it was written; its results are not in it ([Runs](#runs)).
-Every failing property from the long runs has been triaged, except one about our own test client
-containers.
+**Document version:** final edition, written on 2026-11-20. It replaces the third edition (2026-11-19),
+adding the results of the last fix check, fix check 6 ([`68cc2e9d`][run-68cc2e9d]), which ran the
+corrected patch set: the reset and signal patches are verified, and the shutdown patch is verified
+except at one more site, now guarded in the recommended patch ([Fix checks](#fix-checks)). Every run
+has finished; nothing is still running. Every failing property from the long runs has been triaged,
+except one about our own test client containers.
 
 ## Summary
 
@@ -37,13 +35,14 @@ from the test environment; one more problem, seen once in a master run and not o
 [unconfirmed](#lost-activity-task-after-shard-move)
 ([What the long runs showed](#what-the-long-runs-showed)). A confirmation run with Cadence's default
 decision-heartbeat timeout found the Go-client stall in four more workflows, two of them still stuck
-when the run ended. A run with three of the proposed patches
-confirmed the fix for the shutdown crash at the places it guards, found none of the lost signal's
-mechanism in a sample of its remaining failures (weaker evidence than a clean run), and partly
-confirmed the signal-deduplication patch. The next fix check, with the complete patch set, did not
-test the reset patches: one of our own patches made every reset fail, and the run caught that
-mistake. It also found three more places where the shutdown crash happens. A corrected patch set
-is still running.
+when the test gave up waiting for them to close. Fix checks ran v1.4.5 with the proposed patches. The fifth did not test the reset
+patches: one of our own patches made every reset fail, and the run caught that mistake. The sixth and
+last, with that mistake corrected, verified the patches for four signal and reset findings (the
+reset-duplicate property passed, and no failing example of the signal properties was a duplicate or a
+reset loss) and the schema-check fix (weakly), and verified the shutdown patch everywhere except one
+more unguarded place. The recommended patch,
+[combined-final.patch](../antithesis/fixes/combined-final.patch), adds guards there and at the
+matching history-service calls; those added guards passed unit tests but were not run end to end.
 
 ## What we tested
 
@@ -55,11 +54,11 @@ is still running.
 - **Under test:** Cadence v1.4.5 ([`ecd2b70c`][c-v145]) itself, not a stand-in: unmodified upstream
   source with Antithesis coverage instrumentation added at build time, and the official Go client
   `go.uber.org/cadence` v1.4.0.
-- **How long:** 19 finished or cancelled test runs, about 2,717 compute hours in total: on this
-  version, on patched builds of it, and on the commit before the known bug's upstream fix (16 used
-  compute; 3 were cancelled before they started): 17 from 2026-11-18 19:13 UTC to 2026-11-19
-  09:23 UTC, and two confirmation runs on 2026-11-19 after the deadline (16:01 to 20:12 UTC). One
-  more fix check, started at 20:57 UTC, was still running when this edition was written. The two
+- **How long:** 20 finished or cancelled test runs, about 3,120 compute hours in total: on this
+  version, on patched builds of it, and on the commit before the known bug's upstream fix (17 used
+  compute; 3 were cancelled before they started): 17 from 2026-11-18 19:17 UTC to 2026-11-19
+  09:23 UTC, and three after the deadline, from 2026-11-19 16:01 UTC to 2026-11-20 01:13 UTC (fix
+  checks 5 and 6 and the decision-heartbeat confirmation run). The two
   main runs (long hunts) used 601 compute hours each, about 12.5 hours of wall-clock time: [`f04f3907`][run-f04f3907] (the main
   configuration) and [`bba4d2f0`][run-bba4d2f0] (a variant with more shards and default caching).
   The [Runs](#runs) appendix lists every run.
@@ -238,7 +237,7 @@ ordered by the severity the review assigned. Counts are failing examples in the 
 [`f04f3907`][run-f04f3907] and [`bba4d2f0`][run-bba4d2f0], and in the fix-check run
 [`1a0d055c`][run-1a0d055c] (v1.4.5 plus three patches, see [Fix checks](#fix-checks)). A property
 collects every failure of its kind, so where a property mixes causes, the entry says so; for the
-four findings added in this edition, counts are those of the finding's own signature, separated
+four findings added in the second edition, counts are those of the finding's own signature, separated
 from other causes during triage. One failure is often repeated on many later branches of the same
 timeline, so counts measure how much a run explored around a failure, not how many separate times
 it happened. Run reports carry an access token; the moment values (input_hash, vtime) locate one
@@ -305,9 +304,13 @@ failing example in the run's logs.
   continue-as-new links to find the reset run; its new unit test fails without it and passes with it
   ([how it was checked](../antithesis/scratchbook/rca/fixverify-residuals.md#patch-verdicts)). A
   retry that arrives after the reset run was itself reset again is still not covered.
-- **Fix check:** not yet run end to end. Both changes were in fix check 5, but no reset succeeded
-  there because of a mistake in another of our patches, so they were not exercised; they are in the
-  corrected fix check still running ([Fix checks](#fix-checks)).
+- **Fix check:** verified in fix check 6 ([`68cc2e9d`][run-68cc2e9d]). Resets succeeded (4.3k
+  times), the server's reset deduplication fired 782 times ("Duplicated reset request"), no collected
+  history had two resets with the same request ID, and no failure of "an acknowledged signal survives
+  a reset" was a retried reset. The continue-as-new lookback is verified only indirectly: no failure
+  of its shape remained, but its own path could not be told apart in the logs. (In fix check 5 no
+  reset succeeded, because of a mistake in another of our patches, so neither change was exercised
+  there; see [Fix checks](#fix-checks).)
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -354,12 +357,15 @@ failing example in the run's logs.
   new unit test fails without it and passes with it, a second new test checks that flushed events
   are ignored when the run chain does not reach the current run, and the Cadence reset, execution
   and engine package tests pass ([how it was checked](../antithesis/scratchbook/rca/acked-signal-lost-on-reset-fix.md#results)).
-- **Fix check:** verified for its own mechanism. In [`1a0d055c`][run-1a0d055c] the property still
-  failed 373 times, but none of the 362 sampled failures was a buffered signal flushed by a reset:
-  all were the [retried reset](#retried-reset-applied-twice), which that build did not patch. The
-  absence of a mechanism in a sample is weaker evidence than a positive result. Fix check 5 could not
-  test it, since no reset succeeded there ([Fix checks](#fix-checks)); it is in the corrected fix
-  check still running.
+- **Fix check:** verified. In [`1a0d055c`][run-1a0d055c] the property still failed 373 times, but
+  none of the 362 sampled failures was a buffered signal flushed by a reset: all were the
+  [retried reset](#retried-reset-applied-twice), which that build did not patch. Fix check 5 could
+  not test it, since no reset succeeded there. In fix check 6 ([`68cc2e9d`][run-68cc2e9d]), with
+  resets succeeding and the retried reset also patched, the property fell from 666 / 787 to 107, and
+  all 107 examples are two incidents, both errors in our own test code: in both, the run that was
+  current when the reset committed had been created by the driver's own duplicate start, and the
+  "lost" signals were in runs outside the reset's chain. None was a buffered signal lost by a reset
+  ([Fix checks](#fix-checks)).
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -401,7 +407,8 @@ failing example in the run's logs.
   notes that buffered events come back out of order from the database; the code there corrects the
   order only for activity events.
 - **Proposed fix:** add `ORDER BY id` to the buffered-events query for Postgres (and MySQL, for
-  safety). Not yet run end to end.
+  safety). Not run end to end, and not part of the recommended
+  [combined-final.patch](../antithesis/fixes/combined-final.patch).
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   query.
 
@@ -446,9 +453,14 @@ failing example in the run's logs.
 - **Proposed fix:** copy the predecessor's signal request IDs into the successor on continue-as-new.
   This changes Cadence's semantics and needs a bound (for example, only IDs within the client's retry
   window), and the replication path needs the same change. Existing tests pass with the diff; it has
-  no dedicated test. It was not in fix check 5, where every duplicate examined was this finding; it
-  is in the corrected fix check still running ([Fix checks](#fix-checks)). Documenting the
-  limitation is the alternative.
+  no dedicated test. Documenting the limitation is the alternative.
+- **Fix check:** verified in fix check 6 ([`68cc2e9d`][run-68cc2e9d]). It was not in fix check 5,
+  where every duplicate examined was this finding. In fix check 6, none of the 182 failing examples
+  of "an acknowledged signal is applied exactly once" (92) and "a query shows each delivered signal
+  once" (90) was a duplicate; all were errors in our own test code around reused workflow IDs. In the
+  incidents checked against their histories, every signal reported missing had been applied exactly
+  once, in a run the driver's own duplicate start had created, so the fix did not suppress signals it
+  should have kept ([analysis](../antithesis/scratchbook/rca/fixverify6-results.md)).
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -552,7 +564,7 @@ failing example in the run's logs.
 <a id="retried-signal-duplicated-after-reset"></a>
 ### A signal retried by the client during a reset is applied twice
 
-**Full analysis:** [root cause](../antithesis/scratchbook/rca/reset-duplicates-signal.md), [the query view of the same case](../antithesis/scratchbook/rca/query-shows-duplicate-signal.md) · **Proposed fix:** [retried-signal-duplicated-after-reset.patch](../antithesis/fixes/retried-signal-duplicated-after-reset.patch) (first version), [retried-signal-duplicated-after-reset.v2.patch](../antithesis/fixes/retried-signal-duplicated-after-reset.v2.patch) (also fixes the [retried reset](#retried-reset-applied-twice)) and [reset-copies-base-dedup-set.diff](../antithesis/fixes/reset-copies-base-dedup-set.diff) · [adversarial review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-reset.md)
+**Full analysis:** [root cause](../antithesis/scratchbook/rca/reset-duplicates-signal.md), [the query view of the same case](../antithesis/scratchbook/rca/query-shows-duplicate-signal.md) · **Proposed fix:** [retried-signal-duplicated-after-reset.patch](../antithesis/fixes/retried-signal-duplicated-after-reset.patch) (first version), [retried-signal-duplicated-after-reset.v2.patch](../antithesis/fixes/retried-signal-duplicated-after-reset.v2.patch) (also fixes the [retried reset](#retried-reset-applied-twice)) and [reset-copies-base-dedup-set.diff](../antithesis/fixes/reset-copies-base-dedup-set.diff) (**do not apply as written**: it made every reset fail in fix check 5; the corrected version is only in [combined-final.patch](../antithesis/fixes/combined-final.patch)) · [adversarial review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-reset.md)
 
 - **Where:** Cadence server (history service, reset and signal deduplication). **Severity:**
   low-medium.
@@ -590,15 +602,20 @@ failing example in the run's logs.
   package's unit tests ([how it was checked](../antithesis/scratchbook/rca/fixverify-reset-dup.md#proposed-fix)).
   The fix check showed one more gap: when a second reset copies a signal that the first reset had
   reapplied, the copy carries no request ID in history, so the ID is lost again. A further change
-  copies the base run's deduplication set into the reset run; the reset, execution and engine
-  package tests pass with it.
-- **Fix check:** partially verified. In [`1a0d055c`][run-1a0d055c] (first version) the property
-  failed 168 times. Of 131 sampled examples, 94 were the
+  copies the base run's deduplication set into the reset run. As first written
+  (reset-copies-base-dedup-set.diff), it read the base run without a shard ID, which made every
+  reset fail in [fix check 5](#fix-checks); its unit tests mock the store and passed anyway. The
+  corrected version reads the base run through the shard and exists only in
+  [combined-final.patch](../antithesis/fixes/combined-final.patch).
+- **Fix check:** verified. In [`1a0d055c`][run-1a0d055c] (first version) the property failed 168
+  times. Of 131 sampled examples, 94 were the
   [continue-as-new duplicate](#retried-signal-duplicated-after-continue-as-new), which no patch in
   that build addresses, and 37 were the second-reset gap above; none showed the original mechanism
   ([details](../antithesis/scratchbook/rca/fixverify-residuals.md#patch-verdicts)). The second version
-  and the further change were in fix check 5 but not exercised, since no reset succeeded there
-  ([Fix checks](#fix-checks)); they are in the corrected fix check still running.
+  and the further change were in fix check 5 but not exercised, since no reset succeeded there. In
+  fix check 6 ([`68cc2e9d`][run-68cc2e9d]), with all of them and resets succeeding, "a signal is
+  applied at most once in a workflow that was reset" passed: 0 failing examples, against 196 / 280 in
+  the long runs ([Fix checks](#fix-checks)).
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -635,8 +652,8 @@ failing example in the run's logs.
   decision cycles in a row failed in 230 examples (one: input_hash `8357354436728454509`, vtime
   `241.4759`). Each of the four followed the same steps: a decision response failed or timed out at
   the frontend, the client's retry succeeded without a next decision task, and only empty decisions
-  followed, every 3.2 seconds. Two stalled for about a minute until a node stop or the test's own
-  terminate ended them; the other two were still stuck after 95 and 97 empty cycles (over 5
+  followed, every 3.2 seconds. Two stalled for about a minute until a fault stopped the worker's client container or the test's
+  own terminate ended them; the other two were still stuck after 95 and 97 empty cycles (over 5
   minutes) when the run checked that every started workflow had closed. The long runs used a
   1-minute timeout, which cuts this path off (the delayed heartbeat retries found there hit the
   timeout and recovered, as designed), and their detector passed.
@@ -688,19 +705,29 @@ failing example in the run's logs.
   [collection.go:255][src-collection-255]). Three more `Stop()` calls panic the same way, found by
   fix check 5 once the first ones were guarded: frontend `s.adminHandler.Stop()`
   ([service.go:341][src-fe-341]), matching `s.handler.Stop()` ([service.go:153][src-match-153]) and
-  the RPC factory's `d.peerLister.Unsubscribe` ([factory.go:206][src-rpc-206]). They also crash in
-  the unpatched long runs, less often than the first two sites.
+  the RPC factory's `d.peerLister.Unsubscribe` ([factory.go:206][src-rpc-206]). Fix check 6 found
+  one more, once those were guarded: frontend `Stop()` calls `s.handler.UpdateHealthStatus`
+  ([service.go:335][src-fe-335]) on the same handler a few lines before the guarded
+  `s.handler.Stop()`. These further sites also crash in the unpatched long runs, less often than the
+  first two. The history service's `Stop` (`service/history/service.go`) dereferences its handler
+  the same way; no panic was seen there.
 - **Proposed fix:** nil guards in history `PrepareToStop`/`Stop`, frontend `stopRatelimiters`, and,
-  for the three further sites, frontend and matching `Stop` and the RPC factory's `Stop` (or have
-  `Stop` wait for `Start` to finish). The [patch](../antithesis/fixes/sigterm-during-startup-panics.patch)
-  adds the first guards and [combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch)
-  the rest; neither has a unit test of its own
+  for the further sites, frontend and matching `Stop` and the RPC factory's `Stop` (or have `Stop`
+  wait for `Start` to finish). The [patch](../antithesis/fixes/sigterm-during-startup-panics.patch)
+  adds the first guards, [combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch)
+  the three further sites, and the recommended
+  [combined-final.patch](../antithesis/fixes/combined-final.patch) the last ones: frontend
+  `service.go:335` and the history service's `PrepareToStop`/`Stop` calls
   ([fix direction](../antithesis/scratchbook/adversarial/sigterm-during-startup-panics.md#severity-to-state-to-uber)).
-- **Fix check:** verified at the places it guards. [`1a0d055c`][run-1a0d055c] had no nil-pointer
-  panic at all, against about 1.4k crash reports in each long run; its 119 remaining crash reports
-  are one incident of the [schema-check panic](#sql-admin-conn-close-panic). In the next fix check,
+- **Fix check:** partially verified. [`1a0d055c`][run-1a0d055c] had no nil-pointer panic at all,
+  against about 1.4k crash reports in each long run; its 119 remaining crash reports are one incident
+  of the [schema-check panic](#sql-admin-conn-close-panic). In fix check 5,
   [`fc87ca1b`][run-fc87ca1b], the guarded sites stayed clean, but 25 of its 27 crash reports were the
-  three further sites above. The extended guards are in the fix check still running.
+  three further sites above. In fix check 6, [`68cc2e9d`][run-68cc2e9d], every guarded site stayed
+  clean, and all 39 panics behind its 86 crash reports were at the one unguarded frontend site,
+  `service.go:335`. The guards added after that run, in
+  [combined-final.patch](../antithesis/fixes/combined-final.patch), follow the same pattern and
+  passed unit tests, but were not run end to end.
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -730,9 +757,10 @@ failing example in the run's logs.
 - **Root cause:** `Connection.Close` panics when the admin connection's close fails
   ([conn.go:117-123][src-sql-close]); the schema check that `verifySchema` runs on every start
   ([fx.go:163][src-fx-163]) defers that close.
-- **Proposed fix:** ignore or log the close error instead of panicking. In fix check 5
-  ([`fc87ca1b`][run-fc87ca1b]) this panic did not appear at all; that is weak evidence, since it was
-  seen only once before. The fix is also in the fix check still running.
+- **Proposed fix:** ignore or log the close error instead of panicking.
+- **Fix check:** verified, weakly. This panic did not appear in fix check 5
+  ([`fc87ca1b`][run-fc87ca1b]) or fix check 6 ([`68cc2e9d`][run-68cc2e9d]); that is weak evidence,
+  since it was seen only once before.
 - **Already known upstream?** Not reported upstream. Master ([`572e7e2c`][c-master]) has the same
   code.
 
@@ -777,12 +805,41 @@ and the run caught it. Because no reset was applied, none of the reset patches w
 places where the [shutdown crash](#sigterm-during-startup-panics) happens, and no
 [schema-check panic](#sql-admin-conn-close-panic) (weak evidence: one incident before).
 
-**Still running when this edition was written:** `68cc2e9d` (fix check 6, 400 compute hours,
-started 2026-11-19 20:57 UTC) runs v1.4.5 with the corrected patch set,
-[combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch): it reads the base run
-through the shard, adds the three further shutdown guards, and adds the
-[signal deduplication across continue-as-new](../antithesis/fixes/signal-dedup-across-can.diff). Its
-results will be in the next edition.
+**Fix check 6 verified the corrected patch set.** [`68cc2e9d`][run-68cc2e9d] (402.8 compute hours,
+2026-11-19 21:01 to 2026-11-20 01:13 UTC) ran v1.4.5 with
+[combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch): the complete set above,
+with the base run now read through the shard, the three further shutdown guards, and the
+[signal deduplication across continue-as-new](../antithesis/fixes/signal-dedup-across-can.diff). The
+run was valid: "a workflow reset succeeds" was reached 4.3k times. Its failures were traced through
+the workflow histories ([analysis](../antithesis/scratchbook/rca/fixverify6-results.md)):
+
+| Patch | Result | Evidence |
+|---|---|---|
+| [Reset deduplication](#retried-reset-applied-twice) (second version) | **Verified** | 782 "Duplicated reset request" deduplications; no collected history has two resets with the same request ID |
+| [Reset deduplication across continue-as-new](#retried-reset-applied-twice) | **Verified indirectly** | No failure of its shape; its own path cannot be told apart in the logs |
+| [Lost-signal patch](#acked-signal-lost-on-reset) | **Verified** | "an acknowledged signal survives a reset" 107 (666 / 787 in the long runs): two incidents, both errors in our own test code; no buffered signal lost |
+| [Signal deduplication after a reset](#retried-signal-duplicated-after-reset) (first version, plus the base-run dedup copy) | **Verified** | "a signal is applied at most once in a workflow that was reset" passed: 0 failing examples (196 / 280 in the long runs; 114 in fix check 5) |
+| [Signal deduplication across continue-as-new](#retried-signal-duplicated-after-continue-as-new) | **Verified** | No duplicate in the 182 failing examples of the two other signal properties; the rest were our own test code |
+| [Shutdown nil guards](#sigterm-during-startup-panics) | **Partially verified** | Every guarded site at 0; all 39 panics at one more unguarded site, frontend `service.go:335` |
+| [Schema-check close fix](#sql-admin-conn-close-panic) | **Verified, weakly** | No "cannot close connection" panic; seen only once before |
+
+No regression was found in the patched areas. The other failing properties were out of scope for
+this check and were not re-triaged; they match the known findings without a patch in this build
+(signal reordering, stale history read, parent stuck after cancelling its children) and known errors
+in our own test code. One was not examined at all: "a workflow ends only as completed, or as
+canceled or terminated on request" failed 99 times here after passing (0) in
+[`1a0d055c`][run-1a0d055c] and [`fc87ca1b`][run-fc87ca1b]. It is
+probably the known false positive in our own test code (199 and 187 failures in the long runs), but
+that was assumed, not checked.
+
+**Recommended patch:** [combined-final.patch](../antithesis/fixes/combined-final.patch). It is
+everything fix check 6 ran plus the last shutdown guards: frontend `service.go:335` and the history
+service's `PrepareToStop`/`Stop` calls. Those added guards follow the pattern verified at the other
+sites and passed unit tests, but they were **not run end to end**. The patch does not include fixes
+for the [signal reordering](#buffered-signals-reordered-on-reload), the
+[stale history read](#stale-history-after-shard-steal) or the two Go-client findings, and its
+[continue-as-new deduplication](#retried-signal-duplicated-after-continue-as-new) changes Cadence's
+semantics ([patch list](../antithesis/fixes/README.md)).
 
 Earlier fix checks: [`41bf0672`][run-41bf0672] (150 compute hours: v1.4.5 plus the first signal-dedup
 patch and the shutdown nil guards) found the [retried reset](#retried-reset-applied-twice) and a
@@ -875,8 +932,7 @@ stop, well-formed histories (the known bug's check), and the decision-heartbeat 
 ### Runs
 
 Every run that contributed to these results. Report links carry an access token: anyone with the
-link can open the report. Cancelled iteration runs have no report, and the run still running
-has none yet. Length is in compute hours.
+link can open the report. Cancelled iteration runs have no report. Length is in compute hours.
 
 | Run | Purpose | Build | Length | Result |
 |---|---|---|---|---|
@@ -899,7 +955,7 @@ has none yet. Length is in compute hours.
 | [`1a0d055c`][run-1a0d055c] | Fix check 4: three server patches, final tests | [fix check, three patches](#builds) | 401.1 | Shutdown patch verified; lost-signal patch verified for its own mechanism only (absent from a 362-example sample); signal-dedup patch partly; found the [schema-check panic](#sql-admin-conn-close-panic); see [Fix checks](#fix-checks) |
 | [`fc87ca1b`][run-fc87ca1b] | Fix check 5: complete patch set, final tests | [fix check, complete patch set](#builds) | 402.0 | Not a valid check of the reset patches: our base-run dedup copy made every reset fail, so none was exercised; found three more [shutdown panic](#sigterm-during-startup-panics) sites; no [schema-check panic](#sql-admin-conn-close-panic); see [Fix checks](#fix-checks) |
 | [`37b22144`][run-37b22144] | Confirmation of the [Go-client stall](#retried-decision-heartbeat-stalls-workflow), with the default 30-minute decision-heartbeat timeout | [v1.4.5, default heartbeat timeout](#builds) | 301.2 | Stall confirmed in four more workflows |
-| `68cc2e9d` | Fix check 6: corrected patch set | [fix check, corrected patch set](#builds) | 400 committed | Still running when this edition was written |
+| [`68cc2e9d`][run-68cc2e9d] | Fix check 6: corrected patch set, final tests | [fix check, corrected patch set](#builds) | 402.8 | Reset and signal patches verified; shutdown guards verified except one more site (frontend `service.go:335`), guarded in [combined-final.patch](../antithesis/fixes/combined-final.patch) but not run end to end; see [Fix checks](#fix-checks) |
 
 Master runs cited for analysed cases ([`3e9720ca`][run-3e9720ca], [`c26baba5`][run-c26baba5],
 `75b0745b`) belong to the master report.
@@ -954,12 +1010,14 @@ Released components used as is: Postgres 17.4 (`postgres:17.4`,
 [src-fe-356]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/service/frontend/service.go#L356
 [src-collection-255]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/common/quotas/global/collection/collection.go#L255
 [src-fe-341]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/service/frontend/service.go#L341
+[src-fe-335]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/service/frontend/service.go#L335
 [src-match-153]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/service/matching/service.go#L153
 [src-rpc-206]: https://github.com/cadence-workflow/cadence/blob/ecd2b70caf1fe9921aca19b00eb0b2905a3cc602/common/rpc/factory.go#L206
 [go-pollers-507]: https://github.com/cadence-workflow/cadence-go-client/blob/v1.4.0/internal/internal_task_pollers.go#L507-L514
 [go-pollers-372]: https://github.com/cadence-workflow/cadence-go-client/blob/v1.4.0/internal/internal_task_pollers.go#L372-L374
 [go-handlers-857]: https://github.com/cadence-workflow/cadence-go-client/blob/v1.4.0/internal/internal_task_handlers.go#L857-L859
 [go-handlers-1151]: https://github.com/cadence-workflow/cadence-go-client/blob/v1.4.0/internal/internal_task_handlers.go#L1151-L1173
+[run-68cc2e9d]: https://orbitinghail.antithesis.com/report/EyMBLogszMC8DukBb7aZtC-0/siqDt5m0_XX4EcLmw6S1Ok-G8mfSnwxTpdakmohTThQ.html?auth=v2.public.eyJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0Ijoic2lxRHQ1bTBfWFg0RWNMbXc2UzFPay1HOG1mU253eFRwZGFrbW9oVFRoUS5odG1sIiwicmVwb3J0X2lkIjoiRXlNQkxvZ3N6TUM4RHVrQmI3YVp0Qy0wIn19LCJuYmYiOiIyMDI2LTExLTIwVDAwOjI0OjU2LjQ1ODc4Nzk5MloifYudU8JKiYOJS8640j7na_BBau94dUnDIUegh6AiOe4X5wqFe5yow5v-IocAFRUYJw61NIXr_kLUF78dFSbORQI
 [run-fc87ca1b]: https://orbitinghail.antithesis.com/report/DTscNsuhSUVFM_Qdi1bMI6fQ/Tw7yJFhciYbFVDtTyPExBqLyYmOvMPUnC6eTvnC_eeI.html?auth=v2.public.eyJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoiVHc3eUpGaGNpWWJGVkR0VHlQRXhCcUx5WW1Pdk1QVW5DNmVUdm5DX2VlSS5odG1sIiwicmVwb3J0X2lkIjoiRFRzY05zdWhTVVZGTV9RZGkxYk1JNmZRIn19LCJuYmYiOiIyMDI2LTExLTE5VDE5OjI1OjA0LjczNjExODA3N1oifX1CRXJPixytqD7JRDDfi0LUT94rSGtUizAJVytAZHT1EiY_yfzUMwWz3_MDSp_moH7SbzAzem8dIDJUzrBBwQo
 [run-37b22144]: https://orbitinghail.antithesis.com/report/9zqT5qsDKT8wCLgBeP7M22qD/k-avt8ndPRXAsuQ2OvF_8J9ZVGf6LXK9VdWdHwC9DvE.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDE4OjIzOjQ0Ljc4NDY2MDI4MloiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0Ijoiay1hdnQ4bmRQUlhBc3VRMk92Rl84SjlaVkdmNkxYSzlWZFdkSHdDOUR2RS5odG1sIiwicmVwb3J0X2lkIjoiOXpxVDVxc0RLVDh3Q0xnQmVQN00yMnFEIn19fQG0yT3HZWDsY7qruTeczfQ2pKTjndyNt2Ulz9QzP_0_tBcMOMwsP1GB2uNm4QJC-Snve71nVppZxBcwnxRcYgE
 [run-1a0d055c]: https://orbitinghail.antithesis.com/report/xN9Vj4U-36rrB2EGnmdrfioQ/QME7BrLqb1wMUqQZ_d7YrLxBhjYAnqTP7fAgJwKsiWQ.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDA0OjI1OjQ3LjYyNzEwODc2M1oiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoiUU1FN0JyTHFiMXdNVXFRWl9kN1lyTHhCaGpZQW5xVFA3ZkFnSndLc2lXUS5odG1sIiwicmVwb3J0X2lkIjoieE45Vmo0VS0zNnJyQjJFR25tZHJmaW9RIn19favCyE4Utz3UgFQMlJMfMxrcal1_ucEel2g_f4YLh39_8wiydLxDlENLSsMIlTBGXI-s1LdcuIRGnqjm8s8CbAk

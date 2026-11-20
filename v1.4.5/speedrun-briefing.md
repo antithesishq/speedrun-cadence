@@ -3,28 +3,29 @@
 <!-- Internal: for the customer-facing engineer who will turn this into a demo, a blog post or a
 presentation. Never share this file with the customer. -->
 
-**Status:** PARTIAL: one fix check still running (fix-verify-6 `68cc2e9d`, the corrected patch set);
-fix-verify-5 `fc87ca1b` was invalid as a check of the reset patches (our own patch broke every
-reset); the heartbeat-stall confirmation `37b22144` confirmed the stall in four more workflows;
-every failing property from the long runs is triaged except the client-container exits (94 / 21).
-No stop code recorded (no state file).
-**Document version:** third edition, written 2026-11-19 about 21:00 UTC, after the deadline. It
-replaces the second edition (2026-11-19 about 16:20 UTC) and the first (14:52 UTC). A fourth
-edition should follow once fix-verify-6 finishes.
-**Dates:** 2026-11-18 18:52 UTC → 2026-11-19 21:00 UTC (deadline was 2026-11-19 14:00 UTC; the
-session was paused for about 17 to 18 hours while runs finished, then resumed for triage; see
-Method notes) · **Skill:**
+**Status:** COMPLETE: all runs finished; nothing is still running. Fix-verify-6 `68cc2e9d` verified
+the reset and signal patches and the shutdown guards except one more site, now guarded in
+[combined-final.patch](../antithesis/fixes/combined-final.patch) (not run end to end). Remaining open
+items: the [unconfirmed lost activity task](#lost-activity-task-after-shard-move); the client-container
+exit-code-2 property (94 / 21 in the long runs), never triaged; the cross-cluster (XDC) harness, never
+run in Antithesis; and the findings, not yet reported upstream. No stop code recorded (no state
+file).
+**Document version:** final edition, written 2026-11-20. It replaces the third edition (2026-11-19
+about 21:00 UTC), the second (about 16:20 UTC) and the first (14:52 UTC).
+**Dates:** 2026-11-18 18:52 UTC → 2026-11-20 (the last run, fix-verify-6, ended 01:13 UTC; deadline
+was 2026-11-19 14:00 UTC; the session was paused for about 17 to 18 hours while runs finished, then
+resumed for triage; see Method notes) · **Skill:**
 speedrun v0.8, variant not recorded (no state file)
-**Budget (both versions, this report and the master report together):** 3,968 compute hours used
-by the 24 runs in the [run list](../antithesis/scratchbook/runs.tsv) that used compute
-([usage](../antithesis/scratchbook/runs/usage.txt), refreshed 2026-11-19 about 21:00 UTC), plus 400
-committed to fix-verify-6, still running: **4,368 of 5,000**. 29 runs launched: 24 finished or
-cancelled after using compute, 4 cancelled before they started, 1 running. Debugging sessions used
-for triage are billed separately and not in this figure. This report's share: 20 runs, about 3,117
-compute hours: 6 iteration runs on v1.4.5 (52.5), 2 long hunts (1,202.2), 4 known-bug runs shared
-with the master report (203.3), 6 finished fix-check runs (957.8, including fix-verify-5 at 402.0),
-the heartbeat confirmation run (301.2), and fix-verify-6 (400 committed).
-Elapsed: about 26 hours.
+**Budget (both versions, this report and the master report together):** **4,370.7 of 5,000**
+compute hours used by the 25 runs in the [run list](../antithesis/scratchbook/runs.tsv) that used
+compute ([usage](../antithesis/scratchbook/runs/usage.txt), summed over the run IDs in the run list).
+29 runs launched: 25 finished or cancelled after using compute, 4 cancelled before they started.
+Debugging sessions used for triage are billed separately and not in this figure. This report's
+share: 20 runs, about 3,120 compute hours (3,119.8): 6 iteration runs on v1.4.5 (52.5), 2 long hunts
+(1,202.2), 4 known-bug runs shared with the master report (203.3), 7 fix-check runs (1,360.6,
+including fix-verify-5 at 402.0 and fix-verify-6 at 402.8), and the heartbeat confirmation run
+(301.2).
+Elapsed: about 30 hours to the end of the last run.
 **Customer report:** [speedrun-report.md](speedrun-report.md) · **Tests:** [speedrun-tests.md](speedrun-tests.md)
 
 ## The short version
@@ -38,11 +39,14 @@ client. Lead with the signal family on
 reset](speedrun-report.md#acked-signal-lost-on-reset) (no faults needed), and
 [signals reordered by a missing `ORDER BY`](speedrun-report.md#buffered-signals-reordered-on-reload)
 (no faults needed, every run, a one-line fix). The [stale history read](speedrun-report.md#stale-history-after-shard-steal)
-is the consistency story, now with a window of at least 140 seconds. The caveats you must not
-forget: only the shutdown patch is verified end to end, and only at the sites it guards (fix-verify-5
-found three more); the lost-signal patch is verified only by the absence of its mechanism in a
-sample; fix-verify-5 tested **none** of the reset patches, because our own base-dedup-copy patch
-broke every reset (say so plainly if asked), and the corrected set (fix-verify-6) is still running;
+is the consistency story, now with a window of at least 140 seconds. Fix-verify-6 `68cc2e9d` is
+the good news: with resets succeeding, the reset-duplicate property passed (0 against 196 / 280),
+"survives a reset" fell to 107 (two incidents, both our driver), and no failing signal example was a
+duplicate. The caveats you must not forget: the recommended patch is
+[combined-final.patch](../antithesis/fixes/combined-final.patch), and its last shutdown guards
+(frontend `service.go:335`, history `service.go` `PrepareToStop`/`Stop`) passed unit tests only, not
+an end-to-end run; fix-verify-5 tested **none** of the reset patches, because our own base-dedup-copy
+patch broke every reset (say so plainly if asked); the continue-as-new dedup is a semantics change;
 the hunt counts for the reset and continue-as-new findings overstate
 production frequency; and the first edition is already public in the
 [repository](#sharing-the-report). Two findings are in the Go client, not the server: say so. The
@@ -73,13 +77,14 @@ Go-client heartbeat stall is no longer a single occurrence: four more workflows 
     [node-exits.md](../antithesis/scratchbook/rca/node-exits.md),
     [fixverify-residuals.md](../antithesis/scratchbook/rca/fixverify-residuals.md),
     [fixverify5-results.md](../antithesis/scratchbook/rca/fixverify5-results.md),
+    [fixverify6-results.md](../antithesis/scratchbook/rca/fixverify6-results.md),
     [shard-unavailable-after-faults.md](../antithesis/scratchbook/rca/shard-unavailable-after-faults.md),
     and, from the tests document, [hunt-unexpected-close.md](../antithesis/scratchbook/rca/hunt-unexpected-close.md)
     and [hunt-timer-early.md](../antithesis/scratchbook/rca/hunt-timer-early.md);
   - adversarial reviews: all ten files in [adversarial/](../antithesis/scratchbook/adversarial/);
-  - patches and diffs: all ten files in [fixes/](../antithesis/fixes/) (including the corrected
-    [combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch); combined-fixverify3.patch
-    breaks every reset and must not be applied as is);
+  - patches and diffs: all eleven patch files and the README in [fixes/](../antithesis/fixes/)
+    (the recommended one is [combined-final.patch](../antithesis/fixes/combined-final.patch);
+    combined-fixverify3.patch breaks every reset and must not be applied as is);
   - background: [system-brief.md](../antithesis/scratchbook/system-brief.md),
     [guarantees.md](../antithesis/scratchbook/guarantees.md),
     [positive-control.md](../antithesis/scratchbook/positive-control.md);
@@ -131,16 +136,16 @@ property's totals.
 
 | Finding (by severity) | Guarantee broken | Failing examples / runs | Second case | Adversarial verdict | Root cause | Fix check |
 |---|---|---|---|---|---|---|
-| [Retried reset applied twice](speedrun-report.md#retried-reset-applied-twice) | [Guarantee 2](speedrun-report.md#guarantee-2) | no own property; inside "an acknowledged signal survives a reset" (666 / 787); 362 of 373 sampled in `1a0d055c` | **confirmed** on unpatched v1.4.5: `bba4d2f0` counter-115 with histories ([2nd case](../antithesis/scratchbook/rca/retried-reset-applied-twice-2nd.md)), `f04f3907` counter-6 ([v1.4.5 analysis](../antithesis/scratchbook/rca/acked-signal-lost-on-reset-v145.md)); master-b counter-50 from logs only | stands, medium-high ([review](../antithesis/scratchbook/adversarial/retried-reset-applied-twice.md)) | [regression from #5821](../antithesis/scratchbook/rca/fixverify-reset-dup.md#gap-a-reset-retry-dedup-is-dead-code-new-bug) | v2 + CAN lookback pass unit tests; **not exercised** in `fc87ca1b` (no reset committed); in `68cc2e9d`, running |
-| [Signal lost on reset](speedrun-report.md#acked-signal-lost-on-reset) | [Guarantee 2](speedrun-report.md#guarantee-2) | 666 / 787, **mixed** with the retried reset; 373 in `1a0d055c` (all sampled were the retried reset) | **confirmed** on v1.4.5: `f04f3907` counter-35 with histories ([v1.4.5 analysis](../antithesis/scratchbook/rca/acked-signal-lost-on-reset-v145.md)) | stands, medium ([review](../antithesis/scratchbook/adversarial/acked-signal-lost-on-reset.md)) | [new](../antithesis/scratchbook/rca/signal-lost-at-reset-master.md#root-cause-code) | **verified** for its own mechanism (by absence in a 362-example sample, `1a0d055c`); not exercised in `fc87ca1b`; in `68cc2e9d`, running |
-| [Signals reordered](speedrun-report.md#buffered-signals-reordered-on-reload) | [Guarantee 2](speedrun-report.md#guarantee-2) (order is checked, not documented) | 169 / 175; 67 | all 5 runs, both versions; 2 cases checked in Postgres | stands, medium ([review](../antithesis/scratchbook/adversarial/buffered-signals-reordered-on-reload.md)) | [new](../antithesis/scratchbook/rca/hunt-signal-order.md#s1--new-buffered-signals-reordered-on-reload) | one-line fix, not in any build |
-| [Signal duplicated across continue-as-new](speedrun-report.md#retried-signal-duplicated-after-continue-as-new) | [Guarantee 2](speedrun-report.md#guarantee-2) | 41 / 79; 22 (587 across 5 runs); rates overstated by frequent continue-as-new | all 5 runs; master counter-4 from histories | stands, medium ([review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-continue-as-new.md)) | [new](../antithesis/scratchbook/rca/hunt-signal-once-nonreset.md#s2-duplicate-across-continue-as-new-cadence-not-a-driver-bug) (was a lead in the first edition) | diff in `68cc2e9d` (semantics change), running; all 6 sampled duplicate incidents in `fc87ca1b` (138 examples) were this gap |
+| [Retried reset applied twice](speedrun-report.md#retried-reset-applied-twice) | [Guarantee 2](speedrun-report.md#guarantee-2) | no own property; inside "an acknowledged signal survives a reset" (666 / 787); 362 of 373 sampled in `1a0d055c` | **confirmed** on unpatched v1.4.5: `bba4d2f0` counter-115 with histories ([2nd case](../antithesis/scratchbook/rca/retried-reset-applied-twice-2nd.md)), `f04f3907` counter-6 ([v1.4.5 analysis](../antithesis/scratchbook/rca/acked-signal-lost-on-reset-v145.md)); master-b counter-50 from logs only | stands, medium-high ([review](../antithesis/scratchbook/adversarial/retried-reset-applied-twice.md)) | [regression from #5821](../antithesis/scratchbook/rca/fixverify-reset-dup.md#gap-a-reset-retry-dedup-is-dead-code-new-bug) | v2 **verified** in `68cc2e9d` (782 `Duplicated reset request` dedups, no double reset in collected histories); CAN lookback verified indirectly; not exercised in `fc87ca1b` (no reset committed) |
+| [Signal lost on reset](speedrun-report.md#acked-signal-lost-on-reset) | [Guarantee 2](speedrun-report.md#guarantee-2) | 666 / 787, **mixed** with the retried reset; 373 in `1a0d055c` (all sampled were the retried reset) | **confirmed** on v1.4.5: `f04f3907` counter-35 with histories ([v1.4.5 analysis](../antithesis/scratchbook/rca/acked-signal-lost-on-reset-v145.md)) | stands, medium ([review](../antithesis/scratchbook/adversarial/acked-signal-lost-on-reset.md)) | [new](../antithesis/scratchbook/rca/signal-lost-at-reset-master.md#root-cause-code) | **verified** in `68cc2e9d`: 107 (vs 666 / 787) = 2 incidents, both driver false positives (reset base not the model's run, current run created by the driver's duplicate start); earlier by absence in a 362-example sample (`1a0d055c`); not exercised in `fc87ca1b` |
+| [Signals reordered](speedrun-report.md#buffered-signals-reordered-on-reload) | [Guarantee 2](speedrun-report.md#guarantee-2) (order is checked, not documented) | 169 / 175; 67 | all 5 runs, both versions; 2 cases checked in Postgres | stands, medium ([review](../antithesis/scratchbook/adversarial/buffered-signals-reordered-on-reload.md)) | [new](../antithesis/scratchbook/rca/hunt-signal-order.md#s1--new-buffered-signals-reordered-on-reload) | one-line fix, not in any build nor in combined-final.patch; still fails in `68cc2e9d` (99) |
+| [Signal duplicated across continue-as-new](speedrun-report.md#retried-signal-duplicated-after-continue-as-new) | [Guarantee 2](speedrun-report.md#guarantee-2) | 41 / 79; 22 (587 across 5 runs); rates overstated by frequent continue-as-new | all 5 runs; master counter-4 from histories | stands, medium ([review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-continue-as-new.md)) | [new](../antithesis/scratchbook/rca/hunt-signal-once-nonreset.md#s2-duplicate-across-continue-as-new-cadence-not-a-driver-bug) (was a lead in the first edition) | **verified** in `68cc2e9d`: 0 duplicates in 182 examples of the non-reset signal properties (semantics change); all 6 sampled duplicate incidents in `fc87ca1b` (138 examples) were this gap |
 | [Stale history read](speedrun-report.md#stale-history-after-shard-steal) | [Guarantee 3](speedrun-report.md#guarantee-3), [Guarantee 4](speedrun-report.md#guarantee-4) | 68 / 88 (close event), 44 / 82 (describe); 54 and 31 | all 5 runs; long-window case `bba4d2f0` parent-4 | stands, medium ([review](../antithesis/scratchbook/adversarial/stale-history-after-shard-steal.md)) | [new](../antithesis/scratchbook/rca/stale-history-v145.md#root-cause-srccadence-v145) | no patch |
 | [Parent stuck after cancelling children](speedrun-report.md#child-cancel-ack-after-close) | [Guarantee 4](speedrun-report.md#guarantee-4), [Guarantee 5](speedrun-report.md#guarantee-5) | 66 / 27; 2 | all 5 runs (client panic logged in every run) | stands, medium, Go client ([review](../antithesis/scratchbook/adversarial/child-cancel-ack-after-close.md); corrects which server step failed) | [new; client v1.4.0](../antithesis/scratchbook/rca/hunt-liveness.md#c2-new-real-go-client-child-cancel-ack-after-close) | no patch |
-| [Retried signal applied twice after reset](speedrun-report.md#retried-signal-duplicated-after-reset) | [Guarantee 2](speedrun-report.md#guarantee-2) | 196 / 280 (property also catches the continue-as-new duplicate); 168 | many cases, both versions | stands, low-medium ([review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-reset.md)) | [new](../antithesis/scratchbook/rca/reset-duplicates-signal.md#code) | v1 **partially verified**; v2 + base-dedup copy **not exercised** in `fc87ca1b` (the base-dedup copy broke every reset); corrected in `68cc2e9d`, running |
+| [Retried signal applied twice after reset](speedrun-report.md#retried-signal-duplicated-after-reset) | [Guarantee 2](speedrun-report.md#guarantee-2) | 196 / 280 (property also catches the continue-as-new duplicate); 168 | many cases, both versions | stands, low-medium ([review](../antithesis/scratchbook/adversarial/retried-signal-duplicated-after-reset.md)) | [new](../antithesis/scratchbook/rca/reset-duplicates-signal.md#code) | **verified** in `68cc2e9d`: property passes, 0 (vs 196 / 280); v1 partially verified in `1a0d055c`; not exercised in `fc87ca1b` (the base-dedup copy broke every reset) |
 | [Go-client decision-heartbeat stall](speedrun-report.md#retried-decision-heartbeat-stalls-workflow) | [Guarantee 4](speedrun-report.md#guarantee-4), [Guarantee 5](speedrun-report.md#guarantee-5) | 5 workflows in 2 runs: 1 in `6e868ff1`; 4 in `37b22144` (default 30m timeout; detector failed 230 examples) | **confirmed** in `37b22144`: race-62, race-59, race-55, race-51, two still stuck after 95+ empty cycles at the end-of-run check ([hb-1 analysis](../antithesis/scratchbook/rca/heartbeat-stall-hb1.md)); not found in the hunts, whose 1-minute timeout cuts the path off ([search](../antithesis/scratchbook/rca/heartbeat-stall-2nd.md)) | stands, medium-low, Go client ([review](../antithesis/scratchbook/adversarial/retried-decision-heartbeat-stalls-workflow.md)) | [new; client v1.4.0](../antithesis/scratchbook/rca/race-workflow-stuck.md#root-cause-go-client-gouberorgcadence-v140) | no patch |
-| [Shutdown during startup panics](speedrun-report.md#sigterm-during-startup-panics) | none (crash safety) | about 1.4k / 1.4k; 0 nil-pointer panics in `1a0d055c`; 25 of 27 crash examples in `fc87ca1b` at three unguarded sites | many, all versions; three more `Stop()` sites found in `fc87ca1b` (frontend `service.go:341` adminHandler, matching `service.go:153` handler, `rpc/factory.go:206` peerLister), also present in the baselines ([analysis](../antithesis/scratchbook/rca/fixverify5-results.md#2-a-cadence-server-process-crashes-27-examples)) | stands, low ([review](../antithesis/scratchbook/adversarial/sigterm-during-startup-panics.md)) | [new](../antithesis/scratchbook/rca/node-exits.md#q2-exit-code-2) | **verified** at the guarded sites (`1a0d055c`, `fc87ca1b`); guards for the three further sites in `68cc2e9d`, running |
-| [Schema-check close panics](speedrun-report.md#sql-admin-conn-close-panic) | none (crash safety) | 119 (one incident) in `1a0d055c`; 8 of a 999 sample in `f04f3907` (claimed, raw sample not kept) | one incident with raw evidence | stands, low ([review](../antithesis/scratchbook/adversarial/sql-admin-conn-close-panic.md)) | [new](../antithesis/scratchbook/rca/fixverify-residuals.md#patch-verdicts) | 0 in `fc87ca1b` (weak: one incident before) |
+| [Shutdown during startup panics](speedrun-report.md#sigterm-during-startup-panics) | none (crash safety) | about 1.4k / 1.4k; 0 nil-pointer panics in `1a0d055c`; 25 of 27 crash examples in `fc87ca1b` at three unguarded sites; 86 in `68cc2e9d`, all at one more site | many, all versions; three more `Stop()` sites found in `fc87ca1b` (frontend `service.go:341` adminHandler, matching `service.go:153` handler, `rpc/factory.go:206` peerLister), also present in the baselines ([analysis](../antithesis/scratchbook/rca/fixverify5-results.md#2-a-cadence-server-process-crashes-27-examples)) | stands, low ([review](../antithesis/scratchbook/adversarial/sigterm-during-startup-panics.md)) | [new](../antithesis/scratchbook/rca/node-exits.md#q2-exit-code-2) | **partially verified**: guarded sites at 0 (`1a0d055c`, `fc87ca1b`, `68cc2e9d`); in `68cc2e9d` all 39 panics (86 examples) at unguarded frontend `service.go:335`, guarded with history `service.go` `PrepareToStop`/`Stop` in combined-final.patch, unit-tested only |
+| [Schema-check close panics](speedrun-report.md#sql-admin-conn-close-panic) | none (crash safety) | 119 (one incident) in `1a0d055c`; 8 of a 999 sample in `f04f3907` (claimed, raw sample not kept) | one incident with raw evidence | stands, low ([review](../antithesis/scratchbook/adversarial/sql-admin-conn-close-panic.md)) | [new](../antithesis/scratchbook/rca/fixverify-residuals.md#patch-verdicts) | 0 in `fc87ca1b` and `68cc2e9d` (verified weakly: one incident before) |
 
 **Caveats:**
 - The root-cause analysis was blinded only procedurally: the model may have seen a known bug in its
@@ -157,9 +162,13 @@ property's totals.
   It is a Go-client bug; both runs used the race workflows' 4-second decision timeout.
 - The schema-check panic rests on one incident on disk; the baseline recurrence (8 in a f04f sample)
   is the analysis's statement only.
-- The lost-signal patch is "verified" by the absence of its mechanism in a sample, not by a clean
-  run. `fc87ca1b` was meant to be the real test but committed no reset, so "survives a reset"
-  passed vacuously there; `68cc2e9d` is now the real test.
+- The lost-signal patch is verified by `68cc2e9d`, where resets succeeded (4.3k) and all 107
+  remaining "survives a reset" examples are two driver false positives, both traced through the
+  histories. `fc87ca1b` committed no reset, so "survives a reset" passed vacuously there; don't
+  quote its 0.
+- What is **not** verified end to end: the last shutdown guards in combined-final.patch (frontend
+  `service.go:335`, history `service.go` `PrepareToStop`/`Stop`; the history ones were latent, never
+  seen panicking), the `ORDER BY` fix, and anything for the stale read or the Go-client findings.
 - Signal order is not a documented Cadence guarantee; the reordering finding stands because Cadence
   preserves order on its normal path and its own code calls reordering a defect. Expect pushback.
 - Settings that help: small caches, short ack and shard-update intervals, a 4-second decision
@@ -169,8 +178,12 @@ property's totals.
 - The fix-check builds are local builds of v1.4.5 plus patches (worktrees
   `src/cadence-fixverify-signal` and `src/cadence-fixverify3`, changes uncommitted or staged); their
   commits are not on GitHub. `combined-fixverify3.patch` is the unstaged part only, on top of the v2
-  dedup, lost-signal and nil-guard changes staged in that worktree. fix-verify-6 uses
-  `combined-fixverify4.patch` (config `config-fixverify4`).
+  dedup, lost-signal and nil-guard changes staged in that worktree. fix-verify-6 ran the whole
+  `src/cadence-fixverify3` worktree (config `config-fixverify4`); `combined-fixverify4.patch` first
+  held only its unstaged diff (missing the staged history and frontend guards, the v1 replicate
+  dedup and part of the lost-signal reapply) and was regenerated with `git diff HEAD`, so it now
+  matches what ran ([fixverify6-results.md](../antithesis/scratchbook/rca/fixverify6-results.md)).
+  `combined-final.patch` = that plus the last Stop guards.
 
 ## Unconfirmed findings
 
@@ -234,7 +247,7 @@ Antithesis API did not return for these runs. Each row gives the run and the mom
 | [Parent stuck after cancelling children](speedrun-report.md#child-cancel-ack-after-close) | [`f04f3907`][run-f04f3907] | parent-26 `9190701013436246952` / `600.93` | not built | [logs/hunt-liveness/](../antithesis/scratchbook/logs/hunt-liveness/) (`p26_exec.txt`) |
 | [Retried signal applied twice after reset](speedrun-report.md#retried-signal-duplicated-after-reset) | `89a272ed` (cancelled, no report); [`f04f3907`][run-f04f3907] | `-5028251366505688799` / `70.4274695077911`; property sample `2992591194688045504` / `378.16502781794406` (mechanism not checked individually) | not built | [logs/reset-dup/](../antithesis/scratchbook/logs/reset-dup/), [logs/query-dup/](../antithesis/scratchbook/logs/query-dup/) |
 | [Go-client stall](speedrun-report.md#retried-decision-heartbeat-stalls-workflow) | `6e868ff1` (cancelled, no report); [`37b22144`][run-37b22144] | `5337532354675634409` / `401.2113032224588`; race-62 `8357354436728454509` / `241.4759`, race-59 `-7422523944834323835` / `661.5423`, race-55 `-5442527833525018112` / `945.1766`, race-51 `4070884268431302921` / `1468.3026` | not built | [logs/race-stuck/](../antithesis/scratchbook/logs/race-stuck/), [logs/heartbeat-stall-2nd/](../antithesis/scratchbook/logs/heartbeat-stall-2nd/), [logs/heartbeat-stall-hb1/](../antithesis/scratchbook/logs/heartbeat-stall-hb1/) |
-| [Shutdown during startup panics](speedrun-report.md#sigterm-during-startup-panics) | `89a272ed` (cancelled); [`f04f3907`][run-f04f3907]; [`fc87ca1b`][run-fc87ca1b] (three further sites) | hunt property sample `-2980147589376330513` / `300.41704890760593` (stack not checked individually) | not built | [logs/node-exits/](../antithesis/scratchbook/logs/node-exits/), [logs/fixverify5/](../antithesis/scratchbook/logs/fixverify5/) (`crash_*.ndjson`) |
+| [Shutdown during startup panics](speedrun-report.md#sigterm-during-startup-panics) | `89a272ed` (cancelled); [`f04f3907`][run-f04f3907]; [`fc87ca1b`][run-fc87ca1b] (three further sites); [`68cc2e9d`][run-68cc2e9d] (frontend `service.go:335`) | hunt property sample `-2980147589376330513` / `300.41704890760593` (stack not checked individually); `68cc2e9d`: cadence3 at vtime 662.20 | not built | [logs/node-exits/](../antithesis/scratchbook/logs/node-exits/), [logs/fixverify5/](../antithesis/scratchbook/logs/fixverify5/) (`crash_*.ndjson`), [logs/fixverify6/](../antithesis/scratchbook/logs/fixverify6/) (`crash1.ndjson`, `panics.json`) |
 | [Schema-check close panics](speedrun-report.md#sql-admin-conn-close-panic) | [`1a0d055c`][run-1a0d055c] | `6152778289480475374` / `404.6955` | not built | [logs/fixverify-residuals/](../antithesis/scratchbook/logs/fixverify-residuals/) (`crash.json`, `crash-slice.ndjson`) |
 
 ## Method notes
@@ -291,7 +304,9 @@ Antithesis API did not return for these runs. Each row gives the run and the mom
   still says "research only, nothing built" (the check did run and reproduce);
   [stale-history-v145.md](../antithesis/scratchbook/rca/stale-history-v145.md) classifies the
   finding "suspect", superseded by the adversarial review; [violations.tsv](../antithesis/scratchbook/violations.tsv)
-  was not updated for the second edition; [report-facts.md](../antithesis/scratchbook/report-facts.md)
+  was not updated after the first edition: its 7 rows are all still "pending adversarial review",
+  and it lacks buffered-signals-reordered-on-reload, retried-signal-duplicated-after-continue-as-new
+  and child-cancel-ack-after-close; [report-facts.md](../antithesis/scratchbook/report-facts.md)
   links `hunt-liveness.md#c5`, which is not an anchor; [hunt-liveness.md](../antithesis/scratchbook/rca/hunt-liveness.md)
   says step 2 of the child-cancel race failed, which the adversarial review corrects to step 1.
   speedrun-log.md timestamps after 19:30 on 2026-11-18 ran about 30 minutes ahead of real UTC.
@@ -326,15 +341,31 @@ Antithesis API did not return for these runs. Each row gives the run and the mom
   (20:51Z) ([analysis](../antithesis/scratchbook/rca/fixverify5-results.md)). Fix:
   read through `r.shard.GetWorkflowExecution` (sets ShardID and RangeID), in
   [combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch) together with the three
-  Stop guards and signal dedup across continue-as-new; running as fix-verify-6 `68cc2e9d`.
+  Stop guards and signal dedup across continue-as-new; checked in fix-verify-6 `68cc2e9d` (next
+  note).
+- **Fix-verify-6 `68cc2e9d` was valid** (fast tier, 402.8 compute hours, 2026-11-19 21:01 to
+  2026-11-20 01:13 UTC). 0 missing-shard-ID lines (fix-verify-5: 181,679); "a workflow reset
+  succeeds" 4.3k. Per patch ([analysis](../antithesis/scratchbook/rca/fixverify6-results.md#per-patch-verdicts)):
+  base-dedup copy verified; v2 reset dedup verified; reset dedup across continue-as-new verified
+  indirectly; v1 signal dedup verified; signal dedup across continue-as-new verified; lost-signal
+  reapply verified; Stop guards partially (gap at frontend `service.go:335`, guarded afterwards in
+  combined-final.patch, unit-tested only); SQL close verified weakly. No regression found in the
+  patched areas; other properties were out of scope and not re-triaged, and "a workflow ends only as
+  completed, or as canceled or terminated on request" (99 here, 0 in `1a0d055c` and `fc87ca1b`) was not
+  examined (probably the known driver false positive, 199 / 187 in the long hunts). The
+  remaining signal-property failures are driver false positives: S1 (late ack or unsent after an ID
+  reuse), S3 (signal routed to a run created by the driver's own duplicate start), and a new shape,
+  a reset whose base is not the model's run (driver fix in the analysis; not applied or rerun).
 - **Debugging sessions:** several were used for histories at failing moments; one borrowed session
   ended mid-triage and new ones were refused by the API, which left 11 + 37 fix-check examples
-  unsampled.
+  unsampled. For fix-verify-6, histories came from session `729151c50c43e538b92c7e0f4c9cb229-67-6`,
+  started and then cancelled.
 - **Cross-cluster replication:** a two-cluster replication harness was built and validated locally
   on both versions ([antithesis-xdc/README.md](../antithesis-xdc/README.md)) but not run in
   Antithesis.
-- **Document review:** these documents had a link check only; the fresh-reviewer truth check was not
-  run for either edition.
+- **Document review:** earlier editions had a link check only; the final edition also had a
+  fresh-reviewer truth check against the sources, and its findings were applied (one material: the
+  base-dedup diff was linked without a warning that it breaks resets).
 
 ## Content hooks
 
@@ -354,37 +385,38 @@ Antithesis API did not return for these runs. Each row gives the run and the mom
   traced to our own test code or environment, and triage separated them; the known-bug check
   re-found PR #8595 about a minute into a timeline.
 
-## Still running when this edition was written
+## Finished since the third edition
 
-- **`68cc2e9d`** (fixverify-6, `68cc2e9daf03e54787bfa9e0b8cf7e50-67-6`): launched 2026-11-19 20:57
-  UTC, fast tier, 400 compute hours committed; status "starting" at about 21:00 UTC. v1.4.5 plus the
-  corrected patch set [combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch)
-  (base run read through the shard, three more Stop guards, signal dedup across continue-as-new;
-  config [config-fixverify4](../antithesis/config-fixverify4/)). It is the first run that can
-  exercise the reset patches. Expected per the fix-verify-5 analysis: "a workflow reset succeeds"
-  passes again; the reset-duplicate and "survives a reset" properties go to about 0 (any remainder
-  would be a reset-after-reset gap); the C1 driver false positive in "every started workflow closes"
-  returns to baseline levels. No
-  finish time estimated.
+Nothing is still running. Finished since the third edition and now in the report:
+**`68cc2e9d`** (fix-verify-6, `68cc2e9daf03e54787bfa9e0b8cf7e50-67-6`, [report][run-68cc2e9d]):
+completed, 402.8 compute hours, fast tier; v1.4.5 plus
+[combined-fixverify4.patch](../antithesis/fixes/combined-fixverify4.patch) (config
+[config-fixverify4](../antithesis/config-fixverify4/)). Reset and signal patches verified, Stop
+guards partially, SQL close weakly (see Method notes and
+[fixverify6-results.md](../antithesis/scratchbook/rca/fixverify6-results.md)). The final patch,
+[combined-final.patch](../antithesis/fixes/combined-final.patch), adds the Stop guards for the one
+remaining site and for history `service.go` `PrepareToStop`/`Stop`; those were not run end to end.
 
-Finished since the second edition and now in the report: `fc87ca1b` (fix-verify-5, completed, 402.0
-compute hours; invalid as a reset-patch check, see Method notes) and `37b22144` (hb-1, completed,
-301.2 compute hours; stall confirmed in four more workflows). fix-verify-6's results are not in the
-report.
+Finished before the third edition: `fc87ca1b` (fix-verify-5, completed, 402.0 compute hours; invalid
+as a reset-patch check, see Method notes) and `37b22144` (hb-1, completed, 301.2 compute hours;
+stall confirmed in four more workflows).
 
 ## Open questions
 
-- The results of fix-verify-6 (`68cc2e9d`), and a fourth edition. Until then, no reset patch has
-  been exercised end to end with resets succeeding.
-- The driver corrections for the hunt-triage false positives are written up but not applied or
-  rerun.
 - The [unconfirmed lost activity task](#lost-activity-task-after-shard-move) needs a targeted run.
-- No end-to-end check of the `ORDER BY` fix; the continue-as-new diff (a semantics change Uber may
-  not want) is first exercised in fix-verify-6.
+- The client-container exit-code-2 property (94 / 21 in the long runs; 35 / 28 / 28 for client1-3
+  in `68cc2e9d`) was never triaged.
+- Cross-cluster replication (XDC): the harness was built and validated locally but never run in
+  Antithesis.
+- Upstream disclosure: none of the findings has been reported upstream; who reports, and when,
+  given the public repository.
+- The last Stop guards in combined-final.patch were not run end to end.
+- The driver corrections for the hunt-triage false positives and for the fix-verify-6 reset
+  bookkeeping are written up but not applied or rerun.
+- No end-to-end check of the `ORDER BY` fix; the continue-as-new dedup (verified in fix-verify-6) is
+  a semantics change Uber may not want.
 - No patch for the stale read or for either Go client finding; whether a newer Go client fixes
   either.
-- Upstream disclosure: who reports, and when, given the public repository.
-- Cross-cluster replication was never run in Antithesis.
 
 ## Artifacts
 
@@ -406,5 +438,6 @@ report.
 [run-f04f3907]: https://orbitinghail.antithesis.com/report/utHYY91d38r96H5gf-sYaMDe/vPClAGzQ3Uq2Kx0N6Wl0k3kHpcBDAfaTe5taQDtno8s.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDA5OjE3OjUwLjg0MjcxODU1NFoiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoidlBDbEFHelEzVXEyS3gwTjZXbDBrM2tIcGNCREFmYVRlNXRhUUR0bm84cy5odG1sIiwicmVwb3J0X2lkIjoidXRIWVk5MWQzOHI5Nkg1Z2Ytc1lhTURlIn19fVmwK1MIUiq4aD8_CS2kC16GH_eRoW1B7-PfkeakUA1GmOqmWR4jr3C7cB0V6Ce2SsjzSoQF9vtZVUWvi1ENqQU
 [run-3e9720ca]: https://orbitinghail.antithesis.com/report/7hhEamcFv0jBPyIrsJWLmBsG/Jeb3agMIb7xHXvXT9nGWM_0NZ11M5mTMqfMjiaAbdGk.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDA5OjE4OjM5LjY0Mzg3MTU2M1oiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoiSmViM2FnTUliN3hIWHZYVDluR1dNXzBOWjExTTVtVE1xZk1qaWFBYmRHay5odG1sIiwicmVwb3J0X2lkIjoiN2hoRWFtY0Z2MGpCUHlJcnNKV0xtQnNHIn19fZ1gkiwU1Kl8LZsAxyfNG66cLv07jhdY92GNtsGSJAI1SIU28W6K6kcS8AjgoNsNBipANRx7JKP41_2vPOY_dAY
 [run-c26baba5]: https://orbitinghail.antithesis.com/report/wO_En085myHQmXR9je-NrxN_/WT_OG4On7fiNT5aGtjbH1FVwOWACRBMACZwaIMrfsCI.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDA5OjE5OjEwLjYxODM1NTkxNloiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoiV1RfT0c0T243ZmlOVDVhR3RqYkgxRlZ3T1dBQ1JCTUFDWndhSU1yZnNDSS5odG1sIiwicmVwb3J0X2lkIjoid09fRW4wODVteUhRbVhSOWplLU5yeE5fIn19fZ4rU75H0q7pN8z0HJ2A211sZYt1M0VJPLrh4EJLDGOnDVBiAFIXO2_0959rLaOrdeRu-KAuVTRoe0v0ErcjMQY
+[run-68cc2e9d]: https://orbitinghail.antithesis.com/report/EyMBLogszMC8DukBb7aZtC-0/siqDt5m0_XX4EcLmw6S1Ok-G8mfSnwxTpdakmohTThQ.html?auth=v2.public.eyJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0Ijoic2lxRHQ1bTBfWFg0RWNMbXc2UzFPay1HOG1mU253eFRwZGFrbW9oVFRoUS5odG1sIiwicmVwb3J0X2lkIjoiRXlNQkxvZ3N6TUM4RHVrQmI3YVp0Qy0wIn19LCJuYmYiOiIyMDI2LTExLTIwVDAwOjI0OjU2LjQ1ODc4Nzk5MloifYudU8JKiYOJS8640j7na_BBau94dUnDIUegh6AiOe4X5wqFe5yow5v-IocAFRUYJw61NIXr_kLUF78dFSbORQI
 [run-fc87ca1b]: https://orbitinghail.antithesis.com/report/DTscNsuhSUVFM_Qdi1bMI6fQ/Tw7yJFhciYbFVDtTyPExBqLyYmOvMPUnC6eTvnC_eeI.html?auth=v2.public.eyJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0IjoiVHc3eUpGaGNpWWJGVkR0VHlQRXhCcUx5WW1Pdk1QVW5DNmVUdm5DX2VlSS5odG1sIiwicmVwb3J0X2lkIjoiRFRzY05zdWhTVVZGTV9RZGkxYk1JNmZRIn19LCJuYmYiOiIyMDI2LTExLTE5VDE5OjI1OjA0LjczNjExODA3N1oifX1CRXJPixytqD7JRDDfi0LUT94rSGtUizAJVytAZHT1EiY_yfzUMwWz3_MDSp_moH7SbzAzem8dIDJUzrBBwQo
 [run-37b22144]: https://orbitinghail.antithesis.com/report/9zqT5qsDKT8wCLgBeP7M22qD/k-avt8ndPRXAsuQ2OvF_8J9ZVGf6LXK9VdWdHwC9DvE.html?auth=v2.public.eyJuYmYiOiIyMDI2LTExLTE5VDE4OjIzOjQ0Ljc4NDY2MDI4MloiLCJzY29wZSI6eyJSZXBvcnRTY29wZVYxIjp7ImFzc2V0Ijoiay1hdnQ4bmRQUlhBc3VRMk92Rl84SjlaVkdmNkxYSzlWZFdkSHdDOUR2RS5odG1sIiwicmVwb3J0X2lkIjoiOXpxVDVxc0RLVDh3Q0xnQmVQN00yMnFEIn19fQG0yT3HZWDsY7qruTeczfQ2pKTjndyNt2Ulz9QzP_0_tBcMOMwsP1GB2uNm4QJC-Snve71nVppZxBcwnxRcYgE

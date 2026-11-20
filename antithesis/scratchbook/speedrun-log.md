@@ -35,3 +35,4 @@
 2026-11-19T20:25Z hb-1: heartbeat stall confirmed x4 (rca/heartbeat-stall-hb1.md). fixverify-5 done: acked-survives-reset passes (0).
 2026-11-19T20:51Z CORRECTION: fixverify-5 invalid — our reset-copies-base-dedup-set patch broke every reset (missing ShardID). Fixing patch + 3 more Stop guards + signal-dedup-across-can; fixverify-6 next.
 2026-11-19T20:57Z fixverify-6 launched with fixes/combined-fixverify4.patch (corrected).
+2026-11-20T01:44Z fixverify-6 verified the reset/signal patches (rca/fixverify6-results.md); final guards added -> fixes/combined-final.patch.

@@ -3,8 +3,10 @@
 This document explains the test code (workload) used against Cadence v1.4.5, so its checks can be
 judged without reading all of the code. It goes with the [test report](speedrun-report.md).
 
-**Document version:** third edition, 2026-11-19, matching the third edition of the
-[test report](speedrun-report.md). Its content is unchanged from the second edition.
+**Document version:** final edition, 2026-11-20, matching the final edition of the
+[test report](speedrun-report.md). It adds one check found stricter than Cadence in the last fix
+check (reset of a run the model does not own, [below](#checks-that-were-stricter-than-cadence));
+the rest is unchanged from the second edition.
 
 The workload is a single long-running driver program written in Go with
 [hegel](https://hegel.dev) (a property-based, stateful test library), not a set of separate test
@@ -200,3 +202,11 @@ identified; the long runs and the fix checks used the code as listed above.
   before the start completed, a terminate on a run a failed reset had left in place, a read pinned to
   a run the model does not own). Corrections are in the
   [analysis](../antithesis/scratchbook/rca/hunt-liveness.md#notes-on-false-positive-review).
+- **Reset of a run the model does not own.** Found in the last fix check, where all 107 failing
+  examples of "an acknowledged signal survives a reset of its workflow" were two such incidents.
+  The client's `reset` call resolves the workflow ID with an empty run ID, so under faults it can
+  reset whatever run is current when it arrives, including a run created by the driver's own
+  duplicate start; the model then records a reset whose base it does not own and reports signals
+  applied elsewhere as lost. Correction: pass the expected run ID to the reset, skip resets while a
+  duplicate start is pending or a foreign run is known, and do not count a reset whose base is not
+  one of the model's runs ([analysis](../antithesis/scratchbook/rca/fixverify6-results.md#verdict-for-item-1)).
